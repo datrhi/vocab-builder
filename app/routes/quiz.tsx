@@ -10,6 +10,7 @@ type Word = Database["public"]["Tables"]["words"]["Row"];
 interface QuizLoaderData {
   wordId: string | null;
   imagePublicUrl: string | null;
+  definition: string | null;
   error?: string;
   user: User | null;
 }
@@ -24,30 +25,32 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   let wordId: string | null = null;
   let imagePublicUrl: string | null = null;
+  let definition: string | null = null;
   let loaderError: string | null = null;
 
   const { data: allWords, error: allWordsError } = await supabase
     .from("words")
-    .select("id, image_storage_path");
+    .select("id, image_storage_path, definition");
 
   if (allWordsError) {
     console.error("Error fetching word list for quiz:", allWordsError);
-    return json({ wordId: null, imagePublicUrl: null, error: "Could not load words for quiz.", user }, { headers: response.headers });
+    return json({ wordId: null, imagePublicUrl: null, definition: null, error: "Could not load words for quiz.", user }, { headers: response.headers });
   }
 
   if (!allWords || allWords.length === 0) {
-    return json({ wordId: null, imagePublicUrl: null, error: "No words found for quiz. Please add some!", user }, { headers: response.headers });
+    return json({ wordId: null, imagePublicUrl: null, definition: null, error: "No words found for quiz. Please add some!", user }, { headers: response.headers });
   }
 
-  const availableWords = allWords.filter(w => w.image_storage_path);
+  const availableWords = allWords.filter(w => w.image_storage_path && w.definition);
 
   if (availableWords.length === 0) {
-     return json({ wordId: null, imagePublicUrl: null, error: "No words with images found for quiz.", user }, { headers: response.headers });
+     return json({ wordId: null, imagePublicUrl: null, definition: null, error: "No words with images and definitions found for quiz.", user }, { headers: response.headers });
   }
 
   const randomIndex = Math.floor(Math.random() * availableWords.length);
   const randomWord = availableWords[randomIndex];
   wordId = randomWord.id;
+  definition = randomWord.definition;
 
   if (randomWord.image_storage_path) {
     const { data: publicUrlData } = supabase.storage
@@ -57,18 +60,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     if (!imagePublicUrl) {
         loaderError = "Could not retrieve image for the quiz word.";
-        wordId = null; 
+        wordId = null;
+        definition = null;
     }
   } else {
     loaderError = "Selected quiz word does not have an image path.";
     wordId = null;
+    definition = null;
   }
   
   if (!wordId) {
-     return json({ wordId: null, imagePublicUrl: null, error: loaderError || "Failed to prepare a quiz question.", user }, { headers: response.headers });
+     return json({ wordId: null, imagePublicUrl: null, definition: null, error: loaderError || "Failed to prepare a quiz question.", user }, { headers: response.headers });
   }
 
-  return json({ wordId, imagePublicUrl, error: loaderError, user }, { headers: response.headers });
+  return json({ wordId, imagePublicUrl, definition, error: loaderError, user }, { headers: response.headers });
 };
 
 interface ActionData {
@@ -138,7 +143,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 
 export default function QuizPage() {
-  const { wordId, imagePublicUrl, error, user } = useLoaderData<QuizLoaderData>();
+  const { wordId, imagePublicUrl, definition, error, user } = useLoaderData<QuizLoaderData>();
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -216,8 +221,13 @@ export default function QuizPage() {
         <img
           src={imagePublicUrl}
           alt="Guess this word"
-          className="w-full h-72 object-contain rounded-lg shadow-md mb-6"
+          className="w-full h-72 object-contain rounded-lg shadow-md mb-4"
         />
+        {definition && (
+          <div className="mb-6 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+            <p className="text-lg text-gray-800 dark:text-gray-200 text-center">{definition}</p>
+          </div>
+        )}
 
         {!actionData?.isCorrect && actionData?.isCorrect !== undefined && (
            <div className="mb-4 p-3 rounded-lg bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200">
@@ -255,6 +265,7 @@ export default function QuizPage() {
                 placeholder="Type your guess here"
                 required
                 disabled={isSubmitting || isTimedOut}
+                autoComplete="off" // Prevents dropdown of previous entries
               />
             </div>
             <button
