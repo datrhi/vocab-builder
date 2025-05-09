@@ -58,6 +58,7 @@ export type Database = {
           id: string
           image_alt_text: string | null
           image_storage_path: string
+          partOfSpeechType: string | null
           uploader_id: string | null
           word: string
         }
@@ -68,6 +69,7 @@ export type Database = {
           id?: string
           image_alt_text?: string | null
           image_storage_path: string
+          partOfSpeechType?: string | null
           uploader_id?: string | null
           word: string
         }
@@ -78,6 +80,7 @@ export type Database = {
           id?: string
           image_alt_text?: string | null
           image_storage_path?: string
+          partOfSpeechType?: string | null
           uploader_id?: string | null
           word?: string
         }
