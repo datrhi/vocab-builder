@@ -1,5 +1,5 @@
 import { json, LoaderFunctionArgs, ActionFunctionArgs, redirect } from "@remix-run/node";
-import { useLoaderData, Link, Form, useNavigation, useActionData, useSubmit } from "@remix-run/react";
+import { useLoaderData, Link, Form, useNavigation, useActionData } from "@remix-run/react";
 import { createSupabaseServerClient } from "~/services/supabase.server";
 import type { Database } from "../../types/supabase";
 import type { User } from "@supabase/supabase-js";
@@ -11,6 +11,8 @@ interface QuizLoaderData {
   wordId: string | null;
   imagePublicUrl: string | null;
   definition: string | null;
+  partOfSpeech: string | null;
+  wordToScramble: string | null;
   error?: string;
   user: User | null;
 }
@@ -26,31 +28,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let wordId: string | null = null;
   let imagePublicUrl: string | null = null;
   let definition: string | null = null;
+  let partOfSpeech: string | null = null;
+  let wordToScramble: string | null = null;
   let loaderError: string | null = null;
 
   const { data: allWords, error: allWordsError } = await supabase
     .from("words")
-    .select("id, image_storage_path, definition");
+    .select("id, word, image_storage_path, definition, part_of_speech_type");
 
   if (allWordsError) {
     console.error("Error fetching word list for quiz:", allWordsError);
-    return json({ wordId: null, imagePublicUrl: null, definition: null, error: "Could not load words for quiz.", user }, { headers: response.headers });
+    return json({ wordId: null, imagePublicUrl: null, definition: null, partOfSpeech: null, wordToScramble: null, error: "Could not load words for quiz.", user }, { headers: response.headers });
   }
 
   if (!allWords || allWords.length === 0) {
-    return json({ wordId: null, imagePublicUrl: null, definition: null, error: "No words found for quiz. Please add some!", user }, { headers: response.headers });
+    return json({ wordId: null, imagePublicUrl: null, definition: null, partOfSpeech: null, wordToScramble: null, error: "No words found for quiz. Please add some!", user }, { headers: response.headers });
   }
 
-  const availableWords = allWords.filter(w => w.image_storage_path && w.definition);
+  const availableWords = allWords.filter(w => w.word && w.image_storage_path && w.definition && w.part_of_speech_type);
 
   if (availableWords.length === 0) {
-     return json({ wordId: null, imagePublicUrl: null, definition: null, error: "No words with images and definitions found for quiz.", user }, { headers: response.headers });
+     return json({ wordId: null, imagePublicUrl: null, definition: null, partOfSpeech: null, wordToScramble: null, error: "No words with all required fields (word, image, definition, part of speech) found for quiz.", user }, { headers: response.headers });
   }
 
   const randomIndex = Math.floor(Math.random() * availableWords.length);
   const randomWord = availableWords[randomIndex];
   wordId = randomWord.id;
+  wordToScramble = randomWord.word;
   definition = randomWord.definition;
+  partOfSpeech = randomWord.part_of_speech_type;
 
   if (randomWord.image_storage_path) {
     const { data: publicUrlData } = supabase.storage
@@ -62,18 +68,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         loaderError = "Could not retrieve image for the quiz word.";
         wordId = null;
         definition = null;
+        partOfSpeech = null;
+        wordToScramble = null;
     }
   } else {
     loaderError = "Selected quiz word does not have an image path.";
     wordId = null;
     definition = null;
+    partOfSpeech = null;
+    wordToScramble = null;
   }
   
   if (!wordId) {
-     return json({ wordId: null, imagePublicUrl: null, definition: null, error: loaderError || "Failed to prepare a quiz question.", user }, { headers: response.headers });
+     return json({ wordId: null, imagePublicUrl: null, definition: null, partOfSpeech: null, wordToScramble: null, error: loaderError || "Failed to prepare a quiz question.", user }, { headers: response.headers });
   }
 
-  return json({ wordId, imagePublicUrl, definition, error: loaderError, user }, { headers: response.headers });
+  return json({ wordId, imagePublicUrl, definition, partOfSpeech, wordToScramble, error: loaderError, user }, { headers: response.headers });
 };
 
 interface ActionData {
@@ -142,48 +152,53 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 
+// Helper function to scramble a word
+const scrambleWord = (word: string): string => {
+  if (!word || word.length === 0) return "";
+  const letters = word.split('');
+  let scrambled = '';
+  // Ensure it's actually scrambled for words > 1 char
+  // and doesn't accidentally produce the same word if possible
+  do {
+    for (let i = letters.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [letters[i], letters[j]] = [letters[j], letters[i]];
+    }
+    scrambled = letters.join('');
+  } while (word.length > 1 && scrambled === word && new Set(word.split('')).size > 1); // Re-scramble if same and has unique chars
+  return scrambled;
+};
+
 export default function QuizPage() {
-  const { wordId, imagePublicUrl, definition, error, user } = useLoaderData<QuizLoaderData>();
+  const { wordId, imagePublicUrl, definition, partOfSpeech, wordToScramble, error, user } = useLoaderData<QuizLoaderData>();
   const actionData = useActionData<ActionData>();
   const navigation = useNavigation();
-  const submit = useSubmit();
   const isSubmitting = navigation.state === "submitting";
   const formRef = useRef<HTMLFormElement>(null);
 
   const [guess, setGuess] = useState("");
-  const [timeLeft, setTimeLeft] = useState(15);
-  const [isTimedOut, setIsTimedOut] = useState(false);
+  const [scrambledWordDisplay, setScrambledWordDisplay] = useState("");
 
   useEffect(() => {
-    if (actionData?.isCorrect !== undefined || actionData?.error || !wordId) {
-      setTimeLeft(15);
-      setIsTimedOut(false);
-      return;
+    if (wordToScramble) {
+      setScrambledWordDisplay(scrambleWord(wordToScramble));
+    } else {
+      setScrambledWordDisplay("");
     }
-    if (isTimedOut) return;
-    if (timeLeft === 0) {
-      setIsTimedOut(true);
-      if (formRef.current && !isSubmitting) {
-        const formData = new FormData(formRef.current);
-        formData.append("source", "timer");
-        formData.set("userGuess", guess || "_timeout_");
-        submit(formData, { method: "post" });
-      }
-      return;
-    }
-    const intervalId = setInterval(() => {
-      setTimeLeft((prevTime) => Math.max(0, prevTime - 1));
-    }, 1000);
-    return () => clearInterval(intervalId);
-  }, [timeLeft, wordId, actionData, submit, guess, isTimedOut, isSubmitting]);
+  }, [wordToScramble]);
 
   useEffect(() => {
     if (wordId) {
       setGuess("");
-      setTimeLeft(15);
-      setIsTimedOut(false);
     }
   }, [wordId]);
+
+  useEffect(() => {
+    // Reset scrambled word when a new wordId comes in (after submission or error)
+    if (wordId && wordToScramble) {
+      setScrambledWordDisplay(scrambleWord(wordToScramble));
+    }
+  }, [wordId, wordToScramble, actionData]);
 
 
   if (error) {
@@ -224,8 +239,21 @@ export default function QuizPage() {
           className="w-full h-72 object-contain rounded-lg shadow-md mb-4"
         />
         {definition && (
-          <div className="mb-6 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
+          <div className="mb-4 p-4 bg-gray-100 dark:bg-gray-700 rounded-lg">
             <p className="text-lg text-gray-800 dark:text-gray-200 text-center">{definition}</p>
+          </div>
+        )}
+        {partOfSpeech && (
+          <div className="mb-4 p-2 bg-blue-50 dark:bg-blue-900 rounded-lg">
+            <p className="text-sm italic text-blue-700 dark:text-blue-300 text-center">({partOfSpeech})</p>
+          </div>
+        )}
+
+        {scrambledWordDisplay && (
+          <div className="mb-6 p-4 bg-yellow-100 dark:bg-yellow-700 rounded-lg">
+            <p className="text-2xl font-bold tracking-widest text-yellow-800 dark:text-yellow-200 text-center">
+              {scrambledWordDisplay.split('').join('/')}
+            </p>
           </div>
         )}
 
@@ -245,11 +273,7 @@ export default function QuizPage() {
            </div>
         )}
 
-        <div className="mb-6 text-2xl font-semibold text-gray-800 dark:text-gray-200">
-          Time Left: <span className={timeLeft <= 5 ? "text-red-500 dark:text-red-400" : "text-green-500 dark:text-green-400"}>{timeLeft}s</span>
-        </div>
-
-        {(!actionData?.isCorrect !== undefined && !isTimedOut) && (
+        {(!actionData?.isCorrect !== undefined) && (
           <Form method="post" ref={formRef} className="space-y-4">
             <input type="hidden" name="wordId" value={wordId} />
             <input type="hidden" name="source" value="manual" />
@@ -264,31 +288,26 @@ export default function QuizPage() {
                 className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 placeholder="Type your guess here"
                 required
-                disabled={isSubmitting || isTimedOut}
+                disabled={isSubmitting}
                 autoComplete="off" // Prevents dropdown of previous entries
               />
             </div>
             <button
               type="submit"
-              disabled={isSubmitting || isTimedOut}
+              disabled={isSubmitting}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800 disabled:opacity-50"
             >
               {isSubmitting ? "Submitting..." : "Submit Guess"}
             </button>
           </Form>
         )}
-        
-        {isTimedOut && actionData?.isCorrect === undefined && !actionData?.error && (
-          <p className="text-red-500 dark:text-red-400 font-semibold mt-4">Time&amp;apos;s up! Submitting your answer...</p>
-        )}
+
       </div> {/* Closes the white card div */}
 
       {(actionData?.isCorrect !== undefined || actionData?.error) && (
          <div className="mt-6">
             <button
                onClick={() => {
-                 setTimeLeft(15);
-                 setIsTimedOut(false);
                  setGuess("");
                  window.location.reload();
                }}
