@@ -1,27 +1,36 @@
-import { json } from "@remix-run/node";
+import { json, type LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
 import { MoreHorizontal, Share2, Star } from "lucide-react";
 import { useState } from "react";
+import { createSupabaseServerClient } from "~/services/supabase.server";
 
-export const loader = async ({ params }: { params: { id: string } }) => {
-  // In a real app, this would fetch from a database
-  const quizData = {
-    id: params.id,
-    title: "Famous Movie Characters",
-    author: "scypthe",
-    rating: 3.8,
-    votes: 20,
-    questions: 12,
+export const loader = async ({ params, request }: LoaderFunctionArgs) => {
+  const response = new Response();
+  const supabase = createSupabaseServerClient({ request, response });
+
+  const { data: quiz, error } = await supabase
+    .from("quizzes")
+    .select("*")
+    .eq("id", params.id)
+    .single();
+
+  if (error || !quiz) {
+    throw new Response("Quiz not found", { status: 404 });
+  }
+
+  // Enhancing the quiz data with additional fields needed by the UI
+  // but not stored in the database
+  const enhancedQuiz = {
+    ...quiz,
+    votes: 20, // Default values for fields not in the database
+    questions: 10,
     duration: "6 min",
     language: "English",
-    description: "Test your knowledge about characters from famous movies.",
-    isAiGenerated: true,
-    image:
-      "https://images.pexels.com/photos/2873486/pexels-photo-2873486.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
+    isAiGenerated: false,
     tags: ["entertainment", "trivia", "characters", "cinema", "movies"],
   };
 
-  return json({ quiz: quizData });
+  return json({ quiz: enhancedQuiz }, { headers: response.headers });
 };
 
 export default function QuizDetail() {
@@ -87,7 +96,7 @@ export default function QuizDetail() {
           <p className="mb-6 text-gray-700">{quiz.description}</p>
 
           <div className="mb-8 flex flex-wrap gap-2">
-            {quiz.tags.map((tag) => (
+            {quiz.tags.map((tag: string) => (
               <span
                 key={tag}
                 className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600"

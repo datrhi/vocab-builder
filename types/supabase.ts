@@ -155,6 +155,36 @@ export type Database = {
         }
         Relationships: []
       }
+      quizzes: {
+        Row: {
+          author: string
+          category: string
+          description: string | null
+          id: string
+          image: string | null
+          rating: number
+          title: string
+        }
+        Insert: {
+          author: string
+          category: string
+          description?: string | null
+          id?: string
+          image?: string | null
+          rating: number
+          title: string
+        }
+        Update: {
+          author?: string
+          category?: string
+          description?: string | null
+          id?: string
+          image?: string | null
+          rating?: number
+          title?: string
+        }
+        Relationships: []
+      }
       user_word_progress: {
         Row: {
           correct_in_a_row: number | null

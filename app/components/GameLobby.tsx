@@ -4,12 +4,14 @@ import { useState } from "react";
 interface GameLobbyProps {
   pin: string;
   quizTitle: string;
+  quizThumbnail: string;
   onStartGame: () => void;
 }
 
 export default function GameLobby({
   pin,
   quizTitle,
+  quizThumbnail,
   onStartGame,
 }: GameLobbyProps) {
   const [players, setPlayers] = useState<string[]>([]);
@@ -33,13 +35,7 @@ export default function GameLobby({
     <div className="grid min-h-screen grid-cols-1 bg-emerald-900 lg:grid-cols-5">
       <div className="col-span-3 flex flex-col items-center justify-center p-8">
         <div className="mb-8 w-full max-w-md rounded-2xl bg-emerald-950/50 p-6 text-center text-white">
-          <h2 className="mb-4 text-xl font-bold">Join at:</h2>
-          <div className="mb-2 flex items-center justify-center">
-            <div className="text-4xl font-bold">
-              <span className="mr-4">Quiz.com</span>
-            </div>
-          </div>
-          <div className="mb-6">
+          <div className="mb-6 flex flex-col items-center">
             <h3 className="mb-2 text-sm">PIN code:</h3>
             <div className="text-6xl font-bold tracking-wider text-yellow-200">
               {pin.slice(0, 3)} {pin.slice(3)}
@@ -49,10 +45,9 @@ export default function GameLobby({
             </button>
           </div>
           <div className="mb-2 flex justify-center">
-            <div className="h-36 w-36 rounded-lg bg-white p-2">
-              {/* This would be a QR code in a real app */}
+            {/* <div className="h-36 w-36 rounded-lg bg-white p-2">
               <div className="h-full w-full rounded bg-gray-200"></div>
-            </div>
+            </div> */}
           </div>
         </div>
 
@@ -73,7 +68,7 @@ export default function GameLobby({
       <div className="col-span-2 flex flex-col bg-emerald-950/30 p-8">
         <div className="mb-6 overflow-hidden rounded-xl">
           <img
-            src="https://images.pexels.com/photos/261763/pexels-photo-261763.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
+            src={quizThumbnail}
             alt="Quiz thumbnail"
             className="h-40 w-full object-cover"
           />

@@ -6,79 +6,46 @@ import CallToActionCard from "~/components/CallToActionCard";
 import Header from "~/components/Header";
 import QuizCard from "~/components/QuizCard";
 import { getCurrentUser } from "~/services/auth.server";
+import type { Database } from "../../types/supabase";
 
-type Quiz = {
-  id: string;
-  title: string;
-  author: string;
-  rating: number;
-  image: string;
-  isAiGenerated: boolean;
+type Quiz = Database["public"]["Tables"]["quizzes"]["Row"] & {
+  isAiGenerated?: boolean;
 };
 
 type LoaderData = {
   user: User | null;
-  recentQuizzes: Quiz[];
+  quizzes: Quiz[];
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { user } = await getCurrentUser(request);
+  const { user, supabase } = await getCurrentUser(request);
 
-  // In a real app, this would fetch from a database
-  const recentQuizzes = [
-    {
-      id: "famous-movie-characters",
-      title: "Famous Movie Characters",
-      author: "scypthe",
-      rating: 3.8,
-      image:
-        "https://images.pexels.com/photos/2873486/pexels-photo-2873486.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      isAiGenerated: true,
-    },
-    {
-      id: "nba-quiz",
-      title: "NBA Quiz",
-      author: "dmaionwww",
-      rating: 4.5,
-      image:
-        "https://images.pexels.com/photos/358042/pexels-photo-358042.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      isAiGenerated: false,
-    },
-    {
-      id: "french-beginners",
-      title: "Les Nombres 1 - 10 (Beginner French)",
-      author: "ThunderMannn",
-      rating: 4.7,
-      image:
-        "https://images.pexels.com/photos/699122/pexels-photo-699122.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      isAiGenerated: false,
-    },
-    {
-      id: "true-or-false",
-      title: "True or False?",
-      author: "conofmany",
-      rating: 3.9,
-      image:
-        "https://images.pexels.com/photos/7516363/pexels-photo-7516363.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      isAiGenerated: false,
-    },
-    {
-      id: "hot-dogs",
-      title: "Quiz 'bout Hot Dogs",
-      author: "techy",
-      rating: 4.7,
-      image:
-        "https://images.pexels.com/photos/3023479/pexels-photo-3023479.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1",
-      isAiGenerated: false,
-    },
-  ];
+  // Fetch quizzes from Supabase
+  const { data: quizzes, error } = await supabase
+    .from("quizzes")
+    .select("*")
+    .order("rating", { ascending: false });
 
-  return json<LoaderData>({ recentQuizzes, user });
+  if (error) {
+    console.error("Error fetching quizzes:", error);
+    throw new Response("Error fetching quizzes", { status: 500 });
+  }
+
+  // Fallback data if no quizzes are found
+  let enhancedQuizzes: Quiz[] = [];
+
+  if (quizzes && quizzes.length > 0) {
+    // Add isAiGenerated field with default value for compatibility with UI
+    enhancedQuizzes = quizzes.map((quiz) => ({
+      ...quiz,
+      isAiGenerated: false,
+    }));
+  }
+  return json<LoaderData>({ quizzes: enhancedQuizzes, user });
 };
 
 export default function Index() {
-  const { recentQuizzes, user } = useLoaderData<LoaderData>();
-  console.log(user);
+  const { quizzes, user } = useLoaderData<LoaderData>();
 
   return (
     <div className="flex min-h-screen flex-col bg-background bubble-bg">
@@ -99,14 +66,14 @@ export default function Index() {
         <section className="mt-12">
           <h2 className="mb-6 text-xl font-bold text-gray-800">Quizzes</h2>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-            {recentQuizzes.map((quiz) => (
+            {quizzes.map((quiz) => (
               <QuizCard
                 key={quiz.id}
                 id={quiz.id}
                 title={quiz.title}
                 author={quiz.author}
                 rating={quiz.rating}
-                image={quiz.image}
+                image={quiz.image || ""}
                 isAiGenerated={quiz.isAiGenerated}
               />
             ))}
