@@ -1,6 +1,5 @@
 import {
   json,
-  redirect,
   type ActionFunctionArgs,
   type LoaderFunctionArgs,
 } from "@remix-run/node";
@@ -15,6 +14,11 @@ import { useEffect, useReducer } from "react";
 import { toast } from "react-hot-toast";
 import { getCurrentUser } from "~/services/auth.server";
 import { createSupabaseServerClient } from "~/services/supabase.server";
+
+interface ActionData {
+  error?: string;
+  success?: string;
+}
 
 // Redirect to dashboard if already signed in
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -35,51 +39,50 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json({ user, error, redirectTo }, { headers: response.headers });
 }
 
-// Handle form submission and authentication
+// Handle form submission and registration
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const response = new Response();
   const supabase = createSupabaseServerClient({ request, response });
 
-  const authMethod = formData.get("authMethod") as string;
-  const redirectTo = (formData.get("redirectTo") as string) || "/";
-
-  // Handle Google OAuth sign in
-  if (authMethod === "google") {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${
-          new URL(request.url).origin
-        }/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
-      },
-    });
-
-    if (error) {
-      return json({ error: error.message }, { headers: response.headers });
-    }
-
-    // Redirect to the OAuth provider's login page
-    return redirect(data.url, { headers: response.headers });
-  }
-
-  // Handle email/password sign in
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
+  const confirmPassword = formData.get("confirmPassword") as string;
+  const redirectTo = (formData.get("redirectTo") as string) || "/";
 
-  const { error } = await supabase.auth.signInWithPassword({
+  // Validate passwords match
+  if (password !== confirmPassword) {
+    return json<ActionData>(
+      { error: "Passwords do not match" },
+      { headers: response.headers }
+    );
+  }
+
+  // Register with email/password
+  const { error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      emailRedirectTo: `${
+        new URL(request.url).origin
+      }/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
+    },
   });
 
   if (error) {
-    return json({ error: error.message }, { headers: response.headers });
+    return json<ActionData>(
+      { error: error.message },
+      { headers: response.headers }
+    );
   }
 
-  return redirect(redirectTo, { headers: response.headers });
+  return json<ActionData>(
+    { success: "Please check your email to confirm your account" },
+    { headers: response.headers }
+  );
 }
 
-export default function SignIn() {
+export default function SignUp() {
   const { error: urlError, redirectTo } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -90,14 +93,16 @@ export default function SignIn() {
     false
   );
 
-  // Show error message from action or URL
+  // Show success/error messages
   useEffect(() => {
-    // Check for action errors
+    if (actionData?.success) {
+      toast.success(actionData.success);
+    }
+
     if (actionData?.error) {
       toast.error(actionData.error);
     }
 
-    // Check for URL errors (from OAuth callback)
     if (urlError) {
       toast.error(urlError);
     }
@@ -107,36 +112,8 @@ export default function SignIn() {
     <main className="mx-auto flex w-full max-w-lg flex-1 flex-col items-center justify-center px-4">
       <div className="w-full rounded-2xl bg-gray-100 p-8 shadow-sm">
         <h1 className="mb-6 text-center text-2xl font-bold text-gray-800">
-          Sign in
+          Create account
         </h1>
-
-        {/* Comment out for now as supabase google auth bug is not fixed */}
-        {/* <Form method="post">
-          <input type="hidden" name="redirectTo" value={redirectTo} />
-          <input type="hidden" name="authMethod" value="google" />
-          <button
-            type="submit"
-            className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white py-2.5 font-medium text-gray-700 transition-all hover:bg-gray-50"
-          >
-            <img
-              src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
-              alt="Google"
-              className="h-5 w-5"
-            />
-            Continue with Google
-          </button>
-        </Form>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
-          </div>
-          <div className="relative flex justify-center text-sm">
-            <span className="bg-gray-100 px-2 text-gray-500">
-              Or sign in with email
-            </span>
-          </div>
-        </div> */}
 
         <Form method="post">
           <input type="hidden" name="redirectTo" value={redirectTo} />
@@ -157,7 +134,7 @@ export default function SignIn() {
             />
           </div>
 
-          <div className="mb-6">
+          <div className="mb-4">
             <div className="mb-1 flex items-center justify-between">
               <label
                 htmlFor="password"
@@ -183,8 +160,26 @@ export default function SignIn() {
                 type={showPassword ? "text" : "password"}
                 className="w-full rounded-lg border-gray-300 bg-white"
                 required
+                minLength={6}
               />
             </div>
+          </div>
+
+          <div className="mb-6">
+            <label
+              htmlFor="confirmPassword"
+              className="mb-1 block text-sm font-medium text-gray-700"
+            >
+              Confirm Password
+            </label>
+            <input
+              id="confirmPassword"
+              name="confirmPassword"
+              type={showPassword ? "text" : "password"}
+              className="w-full rounded-lg border-gray-300 bg-white"
+              required
+              minLength={6}
+            />
           </div>
 
           <button
@@ -192,22 +187,16 @@ export default function SignIn() {
             disabled={isSubmitting}
             className="w-full rounded-lg bg-emerald-500 py-2.5 font-semibold text-white transition-all hover:bg-emerald-600 disabled:opacity-70"
           >
-            {isSubmitting ? "Signing in..." : "Sign in"}
+            {isSubmitting ? "Creating account..." : "Create account"}
           </button>
         </Form>
 
-        <div className="mt-6 flex items-center justify-between text-sm">
+        <div className="mt-6 text-center text-sm">
           <Link
-            to="/auth/signup"
+            to="/auth/signin"
             className="text-gray-600 hover:text-emerald-600 hover:underline"
           >
-            No account? Create here
-          </Link>
-          <Link
-            to="/auth/reset-password"
-            className="text-gray-600 hover:text-emerald-600 hover:underline"
-          >
-            Forgot password?
+            Already have an account? Sign in
           </Link>
         </div>
       </div>

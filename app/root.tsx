@@ -10,6 +10,7 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "@remix-run/react";
 
 import { Toaster } from "react-hot-toast";
@@ -62,6 +63,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // If you had specific logic in `Layout` beyond the HTML shell, it would be integrated here.
 
 export default function App() {
+  const { env } = useLoaderData<typeof loader>();
+
   return (
     <html lang="en" className="h-full">
       <head>
@@ -72,9 +75,24 @@ export default function App() {
       </head>
       <body className="h-full bg-neutral-50 font-nunito">
         <Outlet />
-        <Toaster position="bottom-center" />
+        <Toaster
+          position="bottom-center"
+          toastOptions={{
+            success: {
+              icon: "✅",
+            },
+            error: {
+              icon: "❌",
+            },
+          }}
+        />
         <ScrollRestoration />
         <Scripts />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.ENV = ${JSON.stringify(env)}`,
+          }}
+        />
       </body>
     </html>
   );

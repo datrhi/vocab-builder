@@ -22,6 +22,7 @@ export default {
         primary: "rgb(var(--color-primary) / <alpha-value>)",
         secondary: "rgb(var(--color-secondary) / <alpha-value>)",
         accent: "rgb(var(--color-accent) / <alpha-value>)",
+        "black-10": "rgb(var(--color-black-10) / <alpha-value>)",
       },
     },
   },

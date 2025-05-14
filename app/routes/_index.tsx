@@ -1,11 +1,29 @@
-import { json } from "@remix-run/node";
+import { json, LoaderFunctionArgs } from "@remix-run/node";
 import { useLoaderData } from "@remix-run/react";
+import { User } from "@supabase/supabase-js";
 import { PencilLine } from "lucide-react";
 import CallToActionCard from "~/components/CallToActionCard";
 import Header from "~/components/Header";
 import QuizCard from "~/components/QuizCard";
+import { getCurrentUser } from "~/services/auth.server";
 
-export const loader = async () => {
+type Quiz = {
+  id: string;
+  title: string;
+  author: string;
+  rating: number;
+  image: string;
+  isAiGenerated: boolean;
+};
+
+type LoaderData = {
+  user: User | null;
+  recentQuizzes: Quiz[];
+};
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const { user } = await getCurrentUser(request);
+
   // In a real app, this would fetch from a database
   const recentQuizzes = [
     {
@@ -55,15 +73,16 @@ export const loader = async () => {
     },
   ];
 
-  return json({ recentQuizzes });
+  return json<LoaderData>({ recentQuizzes, user });
 };
 
 export default function Index() {
-  const { recentQuizzes } = useLoaderData<typeof loader>();
+  const { recentQuizzes, user } = useLoaderData<LoaderData>();
+  console.log(user);
 
   return (
     <div className="flex min-h-screen flex-col bg-background bubble-bg">
-      <Header />
+      <Header user={user} />
 
       <main className="mx-auto w-full max-w-6xl px-4 pb-12">
         <div className="grid grid-cols-1 gap-6 md:grid-cols-1">

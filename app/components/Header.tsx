@@ -3,13 +3,17 @@ import { Search } from "lucide-react";
 import { QuizLogo } from "~/components/QuizLogo";
 
 interface HeaderProps {
-  showAuth?: boolean;
   showPin?: boolean;
+  showAuth?: boolean;
+  showSearch?: boolean;
+  user?: { id: string; email?: string } | null;
 }
 
 export default function Header({
-  showAuth = true,
   showPin = true,
+  showAuth = true,
+  showSearch = true,
+  user,
 }: HeaderProps) {
   return (
     <header className="relative z-10 w-full px-4 py-3 mb-12">
@@ -35,21 +39,30 @@ export default function Header({
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            className="flex items-center justify-center rounded-full bg-gray-100 p-2 text-gray-700 hover:bg-gray-200"
-            aria-label="Search"
-          >
-            <Search size={20} />
-          </button>
-
-          {showAuth && (
-            <Link
-              to="/auth/signin"
-              className="rounded-full bg-lime-200 px-5 py-1.5 font-semibold text-gray-700 transition-all hover:bg-lime-300"
+          {showSearch && (
+            <button
+              className="flex items-center justify-center rounded-full bg-gray-100 p-2 text-gray-700 hover:bg-gray-200"
+              aria-label="Search"
             >
-              Sign in
-            </Link>
+              <Search size={20} />
+            </button>
           )}
+          {showAuth &&
+            (user ? (
+              <Link
+                to={`/profile`}
+                className="rounded-full bg-lime-200 px-5 py-1.5 font-semibold text-gray-700 transition-all hover:bg-lime-300"
+              >
+                {user?.email || user.id}
+              </Link>
+            ) : (
+              <Link
+                to="/auth/signin"
+                className="rounded-full bg-lime-200 px-5 py-1.5 font-semibold text-gray-700 transition-all hover:bg-lime-300"
+              >
+                Sign in
+              </Link>
+            ))}
         </div>
       </div>
     </header>
