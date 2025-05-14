@@ -9,24 +9,6 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      daily_words: {
-        Row: {
-          created_at: string
-          id: string
-          word_ids: string[]
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          word_ids: string[]
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          word_ids?: string[]
-        }
-        Relationships: []
-      }
       user_word_progress: {
         Row: {
           correct_in_a_row: number | null

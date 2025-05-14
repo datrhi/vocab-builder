@@ -20,7 +20,7 @@ export default function Header({
 
         <div className="flex flex-1 items-center justify-center gap-2 px-4">
           {showPin && (
-            <div className="flex w-full max-w-md items-center justify-between rounded-full bg-pink-200 px-4 py-2">
+            <div className="flex w-full max-w-md items-center justify-between rounded bg-pink-200 px-4 py-2">
               <span className="font-semibold text-gray-700">
                 Join Game? Enter PIN:
               </span>

@@ -32,11 +32,11 @@ export const links: LinksFunction = () => [
 
 export const meta: MetaFunction = () => {
   return [
-    { title: "Quiz.com - Play & Create Fun Quizzes" },
+    { title: "Vocab Builder - Engage and Enhance Your Vocabulary" },
     {
       name: "description",
       content:
-        "Create, play, and share interactive quizzes with friends and classmates",
+        "Engage in fun and educational vocabulary challenges by creating, playing, and sharing interactive quizzes with friends and classmates.",
     },
   ];
 };

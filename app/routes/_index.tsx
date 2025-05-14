@@ -71,24 +71,14 @@ export default function Index() {
             title="Create a quiz"
             subtitle="Play for free with 300 participants"
             buttonText="Quiz editor"
-            buttonLink="/create"
+            buttonLink="#"
             image={<PencilLine size={80} className="text-white/80" />}
             bgColor="bg-emerald-800"
           />
-          {/* <CallToActionCard
-            title="A.I."
-            subtitle="Generate a quiz from any subject or pdf"
-            buttonText="Quiz generator"
-            buttonLink="/generate"
-            image={<Brain size={80} className="text-white/80" />}
-            bgColor="bg-emerald-800"
-          /> */}
         </div>
 
         <section className="mt-12">
-          <h2 className="mb-6 text-xl font-bold text-gray-800">
-            Recently published
-          </h2>
+          <h2 className="mb-6 text-xl font-bold text-gray-800">Quizzes</h2>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             {recentQuizzes.map((quiz) => (
               <QuizCard
