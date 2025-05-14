@@ -9,6 +9,152 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      player_answers: {
+        Row: {
+          answer_text: string | null
+          answered_at: string
+          id: string
+          is_correct: boolean | null
+          participant_id: string | null
+          room_word_id: string | null
+          score: number | null
+          time_taken_ms: number | null
+        }
+        Insert: {
+          answer_text?: string | null
+          answered_at?: string
+          id?: string
+          is_correct?: boolean | null
+          participant_id?: string | null
+          room_word_id?: string | null
+          score?: number | null
+          time_taken_ms?: number | null
+        }
+        Update: {
+          answer_text?: string | null
+          answered_at?: string
+          id?: string
+          is_correct?: boolean | null
+          participant_id?: string | null
+          room_word_id?: string | null
+          score?: number | null
+          time_taken_ms?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "player_answers_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "player_answers_room_word_id_fkey"
+            columns: ["room_word_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_room_words"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_participants: {
+        Row: {
+          display_name: string
+          id: string
+          joined_at: string
+          room_id: string | null
+          user_id: string
+        }
+        Insert: {
+          display_name: string
+          id?: string
+          joined_at?: string
+          room_id?: string | null
+          user_id: string
+        }
+        Update: {
+          display_name?: string
+          id?: string
+          joined_at?: string
+          room_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_room_words: {
+        Row: {
+          id: string
+          order_index: number
+          room_id: string | null
+          word_id: string | null
+        }
+        Insert: {
+          id?: string
+          order_index: number
+          room_id?: string | null
+          word_id?: string | null
+        }
+        Update: {
+          id?: string
+          order_index?: number
+          room_id?: string | null
+          word_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_room_words_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_rooms"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_room_words_word_id_fkey"
+            columns: ["word_id"]
+            isOneToOne: false
+            referencedRelation: "words"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_rooms: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string
+          id: string
+          is_active: boolean | null
+          max_players: number | null
+          pin_code: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          created_by: string
+          id?: string
+          is_active?: boolean | null
+          max_players?: number | null
+          pin_code: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string
+          id?: string
+          is_active?: boolean | null
+          max_players?: number | null
+          pin_code?: string
+        }
+        Relationships: []
+      }
       user_word_progress: {
         Row: {
           correct_in_a_row: number | null
@@ -91,10 +237,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      room_leaderboards: {
+        Row: {
+          correct_answers: number | null
+          display_name: string | null
+          questions_answered: number | null
+          room_id: string | null
+          total_score: number | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
-      [_ in never]: never
+      generate_unique_pin: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      get_user_quiz_stats: {
+        Args: { user_id: string }
+        Returns: {
+          total_rooms_joined: number
+          total_words_answered: number
+          total_correct_answers: number
+          total_points: number
+          average_score_per_answer: number
+          most_played_category: string
+        }[]
+      }
+      get_valid_categories_for_quiz: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          category: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
