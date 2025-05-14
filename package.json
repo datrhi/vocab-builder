@@ -20,7 +20,10 @@
     "@supabase/supabase-js": "^2.49.4",
     "isbot": "^4.1.0",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "framer-motion": "^10.16.4",
+    "lucide-react": "^0.344.0",
+    "react-hot-toast": "^2.4.1"
   },
   "devDependencies": {
     "@remix-run/dev": "^2.16.5",

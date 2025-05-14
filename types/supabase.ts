@@ -9,6 +9,24 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      daily_words: {
+        Row: {
+          created_at: string
+          id: string
+          word_ids: string[]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          word_ids: string[]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          word_ids?: string[]
+        }
+        Relationships: []
+      }
       user_word_progress: {
         Row: {
           correct_in_a_row: number | null
@@ -52,6 +70,7 @@ export type Database = {
       }
       words: {
         Row: {
+          category: string | null
           created_at: string
           definition: string | null
           example_sentence: string | null
@@ -63,6 +82,7 @@ export type Database = {
           word: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           definition?: string | null
           example_sentence?: string | null
@@ -74,6 +94,7 @@ export type Database = {
           word: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           definition?: string | null
           example_sentence?: string | null
