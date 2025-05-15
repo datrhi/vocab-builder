@@ -13,8 +13,11 @@ import {
   useLoaderData,
 } from "@remix-run/react";
 
+import { createBrowserClient } from "@supabase/ssr";
+import { User } from "@supabase/supabase-js";
+import { useState } from "react";
 import { Toaster } from "react-hot-toast";
-import { createSupabaseServerClient } from "~/services/supabase.server"; // Added
+import { getCurrentUser } from "./services/auth.server";
 import tailwindStylesUrl from "./tailwind.css?url";
 
 export const links: LinksFunction = () => [
@@ -30,6 +33,14 @@ export const links: LinksFunction = () => [
     href: "https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap",
   },
 ];
+
+export type RootLoaderData = {
+  env: {
+    SUPABASE_URL: string;
+    SUPABASE_ANON_KEY: string;
+  };
+  user: User | null;
+};
 
 export const meta: MetaFunction = () => {
   return [
@@ -50,11 +61,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
 
   const response = new Response();
-  const supabase = createSupabaseServerClient({ request, response });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const { user } = await getCurrentUser(request);
 
   return json({ env, user }, { headers: response.headers });
 }
@@ -63,7 +71,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 // If you had specific logic in `Layout` beyond the HTML shell, it would be integrated here.
 
 export default function App() {
-  const { env } = useLoaderData<typeof loader>();
+  const { env, user } = useLoaderData<typeof loader>();
+  const [supabase] = useState(() => {
+    return createBrowserClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+  });
 
   return (
     <html lang="en" className="h-full">
@@ -74,7 +85,7 @@ export default function App() {
         <Links />
       </head>
       <body className="h-full bg-neutral-50 font-nunito">
-        <Outlet />
+        <Outlet context={{ env, user, supabase }} />
         <Toaster
           position="bottom-center"
           toastOptions={{

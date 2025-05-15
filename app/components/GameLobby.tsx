@@ -1,20 +1,44 @@
 import { Copy, User } from "lucide-react";
 import { useState } from "react";
+import type { Database } from "../../types/supabase";
+
+type Participant = Database["public"]["Tables"]["quiz_participants"]["Row"];
 
 interface GameLobbyProps {
   pin: string;
   quizTitle: string;
   quizThumbnail: string;
   onStartGame: () => void;
+  participants: Participant[];
+  onJoinRoom?: (displayName: string) => void;
+  isHost: boolean;
 }
 
 export default function GameLobby({
   pin,
   quizTitle,
   quizThumbnail,
+  participants,
+  isHost,
   onStartGame,
+  onJoinRoom = () => {},
 }: GameLobbyProps) {
-  const [players, setPlayers] = useState<string[]>([]);
+  const [displayName, setDisplayName] = useState("");
+  const [isJoined, setIsJoined] = useState(false);
+
+  const handleJoinRoom = async () => {
+    if (!displayName.trim()) return;
+
+    onJoinRoom(displayName);
+    // const { error } = await supabase.from("quiz_participants").insert({
+    //   display_name: displayName,
+    //   user_id: userId,
+    //   room_id: roomId,
+    // });
+
+    setIsJoined(true);
+  };
+
   const [settings, setSettings] = useState({
     teamMode: false,
     hideLeaderboard: false,
@@ -31,6 +55,10 @@ export default function GameLobby({
     });
   };
 
+  const copyPinToClipboard = () => {
+    navigator.clipboard.writeText(pin);
+  };
+
   return (
     <div className="grid min-h-screen grid-cols-1 bg-emerald-900 lg:grid-cols-5">
       <div className="col-span-3 flex flex-col items-center justify-center p-8">
@@ -40,29 +68,64 @@ export default function GameLobby({
             <div className="text-6xl font-bold tracking-wider text-yellow-200">
               {pin.slice(0, 3)} {pin.slice(3)}
             </div>
-            <button className="mt-2 flex items-center justify-center gap-1 rounded-full bg-emerald-800/50 px-3 py-1 text-sm hover:bg-emerald-800">
+            <button
+              className="mt-2 flex items-center justify-center gap-1 rounded-full bg-emerald-800/50 px-3 py-1 text-sm hover:bg-emerald-800"
+              onClick={copyPinToClipboard}
+            >
               <Copy size={14} /> Copy
             </button>
           </div>
-          <div className="mb-2 flex justify-center">
-            {/* <div className="h-36 w-36 rounded-lg bg-white p-2">
-              <div className="h-full w-full rounded bg-gray-200"></div>
-            </div> */}
-          </div>
         </div>
 
-        <div className="text-center text-lg font-semibold text-white/90">
-          <div className="mb-2 flex items-center justify-center gap-2">
-            <User size={20} />
-            <span>Waiting for players</span>
+        {!isJoined ? (
+          <div className="mb-8 w-full max-w-md">
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Enter your display name"
+              className="mb-3 w-full rounded-lg border-0 px-4 py-2 text-center"
+            />
+            <button
+              className="w-full rounded-lg bg-emerald-600 py-2 font-semibold text-white hover:bg-emerald-700"
+              onClick={handleJoinRoom}
+            >
+              Join Game
+            </button>
           </div>
-          <button
-            className="mt-6 w-full max-w-xs rounded-full bg-lime-300 py-3 font-bold text-emerald-900 transition-all hover:bg-lime-400"
-            onClick={onStartGame}
-          >
-            Start game
-          </button>
-        </div>
+        ) : (
+          <div className="text-center text-lg font-semibold text-white/90">
+            <div className="mb-2 flex items-center justify-center gap-2">
+              <User size={20} />
+              <span>Players ({participants.length})</span>
+            </div>
+            <div className="mb-6 grid grid-cols-2 gap-2 md:grid-cols-3">
+              {participants.map((participant) => (
+                <div
+                  key={participant.id}
+                  className="rounded-lg bg-emerald-950/50 p-2 text-center text-sm"
+                >
+                  {participant.display_name}
+                </div>
+              ))}
+            </div>
+            {isHost ? (
+              <button
+                className="mt-6 w-full max-w-xs rounded-full bg-lime-300 py-3 font-bold text-emerald-900 transition-all hover:bg-lime-400"
+                onClick={onStartGame}
+              >
+                Start game
+              </button>
+            ) : (
+              <button
+                className="mt-6 w-full max-w-xs rounded-full bg-lime-300 py-3 font-bold text-emerald-900 transition-all hover:bg-lime-400"
+                disabled
+              >
+                Waiting for host to start game
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="col-span-2 flex flex-col bg-emerald-950/30 p-8">

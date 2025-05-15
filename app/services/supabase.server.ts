@@ -1,5 +1,8 @@
-import { createCookie } from "@remix-run/node"; // Ensure this matches your Remix adapter
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import {
+  createServerClient,
+  parseCookieHeader,
+  serializeCookieHeader,
+} from "@supabase/ssr";
 
 // Ensure SUPABASE_URL and SUPABASE_ANON_KEY are set in your .env file
 if (!process.env.SUPABASE_URL) {
@@ -31,20 +34,18 @@ export const createSupabaseServerClient = ({
 }) => {
   return createServerClient(supabaseURL, supabaseAnonKey, {
     cookies: {
-      async get(name: string) {
-        const cookieHeader = request.headers.get("Cookie");
-        const cookie = createCookie(name);
-        return (await cookie.parse(cookieHeader)) || null;
+      getAll() {
+        return parseCookieHeader(request.headers.get("Cookie") ?? "") as {
+          name: string;
+          value: string;
+        }[];
       },
-      async set(name: string, value: string, options: CookieOptions) {
-        const cookie = createCookie(name, options);
-        response.headers.append("Set-Cookie", await cookie.serialize(value));
-      },
-      async remove(name: string, options: CookieOptions) {
-        const cookie = createCookie(name, options);
-        response.headers.append(
-          "Set-Cookie",
-          await cookie.serialize("", { ...options, expires: new Date(0) })
+      setAll(cookiesToSet) {
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.headers.append(
+            "Set-Cookie",
+            serializeCookieHeader(name, value, options)
+          )
         );
       },
     },

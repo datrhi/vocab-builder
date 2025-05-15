@@ -288,6 +288,10 @@ export type Database = {
       }
     }
     Functions: {
+      broadcast_game_event: {
+        Args: { room_id: string; event_type: string; event_data: Json }
+        Returns: undefined
+      }
       generate_unique_pin: {
         Args: Record<PropertyKey, never>
         Returns: string
