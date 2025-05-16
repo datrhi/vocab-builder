@@ -44,6 +44,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const response = new Response();
   const supabase = createSupabaseServerClient({ request, response });
+  const domainUrl = process.env.DOMAIN_URL;
 
   const email = formData.get("email") as string;
   const password = formData.get("password") as string;
@@ -63,9 +64,9 @@ export async function action({ request }: ActionFunctionArgs) {
     email,
     password,
     options: {
-      emailRedirectTo: `${
-        new URL(request.url).origin
-      }/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
+      emailRedirectTo: `${domainUrl}/auth/callback?redirectTo=${encodeURIComponent(
+        redirectTo
+      )}`,
     },
   });
 

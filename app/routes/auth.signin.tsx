@@ -43,15 +43,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const authMethod = formData.get("authMethod") as string;
   const redirectTo = (formData.get("redirectTo") as string) || "/";
+  const domainUrl = process.env.DOMAIN_URL;
 
   // Handle Google OAuth sign in
   if (authMethod === "google") {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${
-          new URL(request.url).origin
-        }/auth/callback?redirectTo=${encodeURIComponent(redirectTo)}`,
+        redirectTo: `${domainUrl}/auth/callback?redirectTo=${encodeURIComponent(
+          redirectTo
+        )}`,
       },
     });
 
@@ -111,7 +112,7 @@ export default function SignIn() {
         </h1>
 
         {/* Comment out for now as supabase google auth bug is not fixed */}
-        {/* <Form method="post">
+        <Form method="post">
           <input type="hidden" name="redirectTo" value={redirectTo} />
           <input type="hidden" name="authMethod" value="google" />
           <button
@@ -136,7 +137,7 @@ export default function SignIn() {
               Or sign in with email
             </span>
           </div>
-        </div> */}
+        </div>
 
         <Form method="post">
           <input type="hidden" name="redirectTo" value={redirectTo} />

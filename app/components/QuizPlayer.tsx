@@ -37,17 +37,6 @@ export default function QuizPlayer({
   const [timeRemaining, setTimeRemaining] = useState(TIME_PER_QUESTION);
   const [userAnswer, setUserAnswer] = useState("");
 
-  // Use the game state manager for realtime updates
-  /*   const { gameState, submitAnswer, endGame } = useGameState(
-    roomId,
-    initialParticipants
-  ); */
-  // const playerAnswers = gameState.answers.filter(
-  //   (answer) => answer.room_word_id === currentRoomWord?.id
-  // );
-
-  // Get current word data
-  // Simulate timer countdown
   useEffect(() => {
     if (timeRemaining > 0) {
       const timer = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
@@ -79,33 +68,7 @@ export default function QuizPlayer({
       const baseScore = isCorrect ? 100 : 0;
       const score = Math.round(baseScore * scoreMultiplier);
 
-      // Get user info from Supabase
       onSubmitAnswer(userAnswer, isCorrect, score, timeTaken);
-      // const {
-      //   data: { user },
-      // } = await supabase.auth.getUser();
-
-      // if (user) {
-      //   // Get the participant record for this user
-      //   const { data: participantData } = await supabase
-      //     .from("quiz_participants")
-      //     .select("*")
-      //     .eq("user_id", user.id)
-      //     .eq("room_id", roomId)
-      //     .single();
-
-      //   if (participantData) {
-      //     // Use our game state manager to submit the answer
-      //     await submitAnswer(
-      //       participantData.id,
-      //       currentRoomWord.id,
-      //       userAnswer,
-      //       isCorrect,
-      //       score,
-      //       timeTaken
-      //     );
-      //   }
-      // }
 
       // Clear answer and move to next question
       setUserAnswer("");
