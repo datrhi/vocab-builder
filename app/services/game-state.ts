@@ -97,10 +97,10 @@ export const useGameState = (
         username: participant.display_name,
         score: score,
         avatar: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`,
-        isHost: isHost && userId === participant.user_id,
+        isHost: participant.user_id === room.created_by,
       };
     });
-  }, [gameState.participants, gameState.answers, isHost, userId]);
+  }, [gameState.participants, gameState.answers, room.created_by]);
 
   const canAnswer = useMemo(() => {
     const participantId = gameState.participants.find(

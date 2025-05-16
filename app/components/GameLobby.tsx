@@ -10,6 +10,7 @@ interface GameLobbyProps {
   quizThumbnail: string;
   onStartGame: () => void;
   participants: Participant[];
+  roomCreatedBy: string;
   onJoinRoom?: (displayName: string) => Promise<boolean>;
   isHost: boolean;
 }
@@ -19,7 +20,7 @@ export default function GameLobby({
   quizTitle,
   quizThumbnail,
   participants,
-  isHost,
+  roomCreatedBy,
   onStartGame,
   onJoinRoom = () => Promise.resolve(true),
 }: GameLobbyProps) {
@@ -103,12 +104,44 @@ export default function GameLobby({
             <div className="mb-6 grid grid-cols-2 gap-2 md:grid-cols-3">
               {participants.map((participant) => (
                 <div
+                  className="rounded-lg bg-emerald-950/50 p-2 gap-2 text-center text-sm flex items-center"
                   key={participant.id}
-                  className="rounded-lg bg-emerald-950/50 p-2 text-center text-sm"
                 >
-                  {participant.display_name}
+                  {/* Avatar */}
+                  <div className="relative h-10 w-10 overflow-hidden rounded-full border-2 border-amber-500 bg-white">
+                    <img
+                      src={`https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`}
+                      alt={`${participant.display_name}'s avatar`}
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+
+                  {/* Username and host badge */}
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold">
+                      {participant.display_name}
+                    </span>
+                    {participant.user_id === roomCreatedBy && (
+                      <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600 border border-red-600">
+                        HOST
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
+              {/* {participants.map((participant) => (
+                <div
+                  key={participant.id}
+                  className="rounded-lg bg-emerald-950/50 p-2 gap-2 text-center text-sm flex items-center"
+                >
+                  <img
+                    src={`https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`}
+                    alt={`${participant.display_name}'s avatar`}
+                    className="w-10 h-10 mb-1 rounded-full"
+                  />
+                  {participant.display_name}
+                </div>
+              ))} */}
             </div>
             {isHost ? (
               <button

@@ -276,6 +276,7 @@ export default function Play() {
             participants={gameState.participants}
             onJoinRoom={joinRoom}
             isHost={isHost}
+            roomCreatedBy={room.created_by}
           />
         );
       case "in-progress":
