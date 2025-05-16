@@ -5,14 +5,12 @@ import {
   useRouteError,
   useSearchParams,
 } from "@remix-run/react";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import GameLobby from "~/components/GameLobby";
 import QuizPlayer from "~/components/QuizPlayer";
 import { getCurrentUser } from "~/services/auth.server";
 import { createSupabaseServerClient } from "~/services/supabase.server";
 import type { Database } from "../../types/supabase";
 import GameEnd from "../components/GameEnd";
-import { MAX_PLAYERS, WORDS_PER_GAME } from "../constants/game";
 import { useGameState } from "../services/game-state";
 
 type Quiz = Database["public"]["Tables"]["quizzes"]["Row"];
@@ -31,12 +29,16 @@ interface LoaderData {
 }
 
 export const loader = async ({ params, request }: LoaderFunctionArgs) => {
-  const quizId = params.id;
+  const roomId = params.id;
   const url = new URL(request.url);
   const pin = url.searchParams.get("pin");
 
-  if (!quizId) {
-    throw json({ message: "Quiz ID is required" }, { status: 400 });
+  if (!roomId) {
+    throw json({ message: "Room ID is required" }, { status: 400 });
+  }
+
+  if (!pin) {
+    throw json({ message: "PIN is required" }, { status: 400 });
   }
 
   try {
@@ -49,32 +51,39 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
       throw json({ message: "User not found" }, { status: 401 });
     }
 
-    // Fetch quiz data
-    const { data: quiz, error: quizError } = await supabase
-      .from("quizzes")
+    // Fetch room data
+    const { data: room, error: roomError } = await supabase
+      .from("quiz_rooms")
       .select("*")
-      .eq("id", quizId)
+      .eq("id", roomId)
+      .eq("pin_code", pin)
       .single();
 
-    if (quizError) {
-      console.error("Error fetching quiz:", quizError);
+    if (roomError || !room) {
+      console.error("Error fetching room:", roomError);
       throw json(
-        { message: "Quiz not found", details: quizError.message },
+        {
+          message: "Room not found or invalid PIN",
+          details: roomError?.message,
+        },
         { status: 404 }
       );
     }
 
-    if (!quiz) {
-      throw json({ message: "Quiz not found" }, { status: 404 });
-    }
+    // Fetch the quiz associated with this room's category
+    const { data: quiz, error: quizError } = await supabase
+      .from("quizzes")
+      .select("*")
+      .eq("category", room.category)
+      .single();
 
-    // Fetch or create room
-    const { room, roomId } = await getOrCreateRoom({
-      supabase,
-      pin,
-      quiz,
-      userId,
-    });
+    if (quizError || !quiz) {
+      console.error("Error fetching quiz:", quizError);
+      throw json(
+        { message: "Quiz not found", details: quizError?.message },
+        { status: 404 }
+      );
+    }
 
     // Get participants in the room
     const { data: participants, error: participantsError } = await supabase
@@ -122,152 +131,6 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
     );
   }
 };
-
-async function getOrCreateRoom({
-  supabase,
-  pin,
-  quiz,
-  userId,
-}: {
-  supabase: SupabaseClient<Database>;
-  pin: string | null;
-  quiz: Quiz;
-  userId: string | null;
-}) {
-  // Fetch room data if pin is provided
-  if (pin) {
-    const { data: roomData, error: roomError } = await supabase
-      .from("quiz_rooms")
-      .select("*")
-      .eq("pin_code", pin)
-      .single();
-
-    if (!roomError && roomData) {
-      return { room: roomData, roomId: roomData.id };
-    } else if (roomError && roomError.code !== "PGRST116") {
-      // Only log non-404 errors
-      console.error("Error fetching room:", roomError);
-    }
-  }
-
-  // Generate a unique PIN code
-  const { data: pinData, error: pinError } = await supabase.rpc(
-    "generate_unique_pin"
-  );
-
-  if (pinError) {
-    console.error("Error generating PIN:", pinError);
-    // Fallback to random PIN
-    return createRoomWithPin({
-      supabase,
-      pin,
-      quiz,
-      userId,
-      uniquePin: Math.floor(100000 + Math.random() * 900000).toString(),
-    });
-  }
-
-  // Insert new room with generated PIN
-  const uniquePin =
-    pinData || Math.floor(100000 + Math.random() * 900000).toString();
-  return createRoomWithPin({
-    supabase,
-    pin,
-    quiz,
-    userId,
-    uniquePin,
-  });
-}
-
-async function createRoomWithPin({
-  supabase,
-  pin,
-  quiz,
-  userId,
-  uniquePin,
-}: {
-  supabase: SupabaseClient<Database>;
-  pin: string | null;
-  quiz: Quiz;
-  userId: string | null;
-  uniquePin: string;
-}) {
-  // Insert new room
-  const { data: newRoom, error: createRoomError } = await supabase
-    .from("quiz_rooms")
-    .insert({
-      category: quiz.category,
-      created_by: userId || "anonymous",
-      pin_code: pin || uniquePin,
-      is_active: true,
-      max_players: MAX_PLAYERS,
-    })
-    .select()
-    .single();
-
-  if (createRoomError) {
-    console.error("Error creating room:", createRoomError);
-    throw json(
-      {
-        message: "Failed to create room",
-        details: createRoomError.message,
-      },
-      { status: 500 }
-    );
-  }
-
-  if (!newRoom) {
-    throw json(
-      { message: "Failed to create room: no room data returned" },
-      { status: 500 }
-    );
-  }
-
-  const roomId = newRoom.id;
-
-  // Fetch words with the same category
-  const { data: words, error: wordsError } = await supabase
-    .from("words")
-    .select("*")
-    .eq("category", quiz.category)
-    .order("created_at", { ascending: false })
-    .limit(WORDS_PER_GAME);
-
-  if (wordsError) {
-    console.error("Error fetching words:", wordsError);
-    throw json(
-      { message: "Failed to fetch words", details: wordsError.message },
-      { status: 500 }
-    );
-  }
-
-  // Insert words into quiz_room_words
-  const roomWords = words.map((word: Word, index: number) => ({
-    room_id: roomId,
-    word_id: word.id,
-    order_index: index,
-  }));
-
-  // Insert words into quiz_room_words
-  const { error: insertWordsError } = await supabase
-    .from("quiz_room_words")
-    .insert(roomWords);
-
-  if (insertWordsError) {
-    console.error("Error inserting room words:", insertWordsError);
-    throw json(
-      {
-        message: "Failed to setup quiz words",
-        details: `Error code: ${insertWordsError.code}, Message: ${
-          insertWordsError.message
-        }, Hint: ${insertWordsError.hint || "No hint provided"}`,
-      },
-      { status: 500 }
-    );
-  }
-
-  return { room: newRoom, roomId };
-}
 
 export function ErrorBoundary() {
   const error = useRouteError();
