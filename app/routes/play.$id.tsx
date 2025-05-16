@@ -1,10 +1,13 @@
-import { LoaderFunctionArgs, json } from "@remix-run/node";
+import { ActionFunctionArgs, LoaderFunctionArgs, json } from "@remix-run/node";
 import {
   isRouteErrorResponse,
+  useBeforeUnload,
+  useFetcher,
   useLoaderData,
   useRouteError,
   useSearchParams,
 } from "@remix-run/react";
+import { useCallback } from "react";
 import GameLobby from "~/components/GameLobby";
 import QuizPlayer from "~/components/QuizPlayer";
 import { getCurrentUser } from "~/services/auth.server";
@@ -132,6 +135,47 @@ export const loader = async ({ params, request }: LoaderFunctionArgs) => {
   }
 };
 
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const formData = await request.formData();
+  const roomId = params.id;
+  const intent = formData.get("intent");
+  const isHost = formData.get("isHost") === "true";
+
+  if (!roomId) {
+    return json(
+      { success: false, message: "Missing required parameters" },
+      { status: 400 }
+    );
+  }
+
+  if (intent === "leave-room") {
+    try {
+      const { user, response } = await getCurrentUser(request);
+      const supabase = createSupabaseServerClient({ request, response });
+
+      if (!user?.id) {
+        return json(
+          { success: false, message: "User not authenticated" },
+          { status: 401 }
+        );
+      }
+
+      if (isHost) {
+        await supabase.from("quiz_rooms").delete().eq("id", roomId);
+      }
+      return json({ success: true }, { headers: response.headers });
+    } catch (error) {
+      console.error("Error leaving room:", error);
+      return json(
+        { success: false, message: "Failed to leave room" },
+        { status: 500 }
+      );
+    }
+  }
+
+  return json({ success: false, message: "Invalid intent" }, { status: 400 });
+};
+
 export function ErrorBoundary() {
   const error = useRouteError();
 
@@ -189,7 +233,7 @@ export function ErrorBoundary() {
 }
 
 export default function Play() {
-  const { quiz, room, roomId, participants, roomWords, userId } =
+  const { quiz, room, participants, roomWords, userId } =
     useLoaderData<typeof loader>();
   const [searchParams] = useSearchParams();
   const pin = searchParams.get("pin") || room.pin_code;
@@ -198,13 +242,27 @@ export default function Play() {
     gameState,
     canAnswer,
     leaderboard,
+    isHost,
     submitAnswer,
     endGame,
     joinRoom,
     startGame,
     nextQuestion,
     showLeaderboard,
-  } = useGameState(roomId, userId, roomWords, participants);
+  } = useGameState(room, userId, roomWords, participants);
+
+  const leaveFetcher = useFetcher();
+  useBeforeUnload(
+    useCallback(() => {
+      leaveFetcher.submit(
+        {
+          intent: "leave-room",
+          isHost,
+        },
+        { method: "post" }
+      );
+    }, [leaveFetcher, isHost])
+  );
 
   const renderGame = () => {
     switch (gameState.status) {
@@ -217,7 +275,7 @@ export default function Play() {
             onStartGame={startGame}
             participants={gameState.participants}
             onJoinRoom={joinRoom}
-            isHost={gameState.isHost}
+            isHost={isHost}
           />
         );
       case "in-progress":
@@ -229,7 +287,7 @@ export default function Play() {
             onEndGame={endGame}
             onSubmitAnswer={submitAnswer}
             onShowLeaderboard={showLeaderboard}
-            isHost={gameState.isHost}
+            isHost={isHost}
             onNextQuestion={nextQuestion}
             canAnswer={canAnswer}
             gameEvents={gameState.events}

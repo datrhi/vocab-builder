@@ -10,7 +10,7 @@ interface GameLobbyProps {
   quizThumbnail: string;
   onStartGame: () => void;
   participants: Participant[];
-  onJoinRoom?: (displayName: string) => void;
+  onJoinRoom?: (displayName: string) => Promise<boolean>;
   isHost: boolean;
 }
 
@@ -21,7 +21,7 @@ export default function GameLobby({
   participants,
   isHost,
   onStartGame,
-  onJoinRoom = () => {},
+  onJoinRoom = () => Promise.resolve(true),
 }: GameLobbyProps) {
   const [displayName, setDisplayName] = useState("");
   const [isJoined, setIsJoined] = useState(false);
@@ -29,12 +29,8 @@ export default function GameLobby({
   const handleJoinRoom = async () => {
     if (!displayName.trim()) return;
 
-    onJoinRoom(displayName);
-    // const { error } = await supabase.from("quiz_participants").insert({
-    //   display_name: displayName,
-    //   user_id: userId,
-    //   room_id: roomId,
-    // });
+    const success = await onJoinRoom(displayName);
+    if (!success) return;
 
     setIsJoined(true);
   };

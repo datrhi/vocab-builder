@@ -61,12 +61,15 @@ export default function QuizPlayer({
   useEffect(() => {
     if (timeRemaining > 0) {
       const timer = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
+      if (!canAnswer) {
+        clearTimeout(timer);
+      }
       return () => clearTimeout(timer);
     } else if (timeRemaining === 0) {
       // Move to next question when time runs out
       onShowLeaderboard();
     }
-  }, [timeRemaining]);
+  }, [timeRemaining, canAnswer]);
 
   useEffect(() => {
     if (wordData.wordIndex > -1) {
@@ -174,7 +177,6 @@ export default function QuizPlayer({
                 }
               }}
               disabled={!canAnswer}
-              autoFocus
             />
             {canAnswer && (
               <button

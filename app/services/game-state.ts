@@ -1,6 +1,7 @@
-import { useOutletContext } from "@remix-run/react";
+import { useBeforeUnload, useOutletContext } from "@remix-run/react";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import toast from "react-hot-toast";
 import type { Database } from "../../types/supabase";
 
 export type GameStatus = "waiting" | "in-progress" | "completed";
@@ -25,7 +26,6 @@ export type GameState = {
   participants: Database["public"]["Tables"]["quiz_participants"]["Row"][];
   answers: Database["public"]["Tables"]["player_answers"]["Row"][];
   events: GameEvent[];
-  isHost: boolean;
   wordData: {
     scrambleWord: string;
     answer: string;
@@ -38,7 +38,7 @@ export type GameState = {
 };
 
 export const useGameState = (
-  roomId: string,
+  room: Database["public"]["Tables"]["quiz_rooms"]["Row"],
   userId: string,
   roomWords: (Database["public"]["Tables"]["quiz_room_words"]["Row"] & {
     word: Database["public"]["Tables"]["words"]["Row"];
@@ -52,7 +52,6 @@ export const useGameState = (
     participants: initialParticipants,
     answers: [],
     events: [],
-    isHost: false,
     wordData: {
       scrambleWord: "",
       answer: "",
@@ -64,10 +63,26 @@ export const useGameState = (
     isShowLeaderboard: false,
   });
 
+  const isHost = room.created_by === userId;
+  // Handle when user leaves the page (before unload event)
+  const roomId = room.id;
+
   const { supabase } = useOutletContext<{
     supabase: SupabaseClient<Database>;
   }>();
   console.log("gameState", gameState);
+  useBeforeUnload(
+    useCallback(() => {
+      console.log("User leaving room (before unload):", roomId);
+      supabase.channel(`game:${roomId}`).send({
+        type: "broadcast",
+        event: "player_left",
+        payload: {
+          userId,
+        },
+      });
+    }, [roomId, userId, supabase])
+  );
 
   const leaderboard = useMemo(() => {
     return gameState.participants.map((participant) => {
@@ -82,10 +97,10 @@ export const useGameState = (
         username: participant.display_name,
         score: score,
         avatar: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`,
-        isHost: gameState.isHost,
+        isHost: isHost && userId === participant.user_id,
       };
     });
-  }, [gameState.participants, gameState.answers, gameState.isHost]);
+  }, [gameState.participants, gameState.answers, isHost, userId]);
 
   const canAnswer = useMemo(() => {
     const participantId = gameState.participants.find(
@@ -120,30 +135,6 @@ export const useGameState = (
     return scrambledWord;
   };
 
-  const checkRoomHost = async () => {
-    try {
-      const { data: room, error: roomError } = await supabase
-        .from("quiz_rooms")
-        .select("*")
-        .eq("id", roomId)
-        .single();
-      if (roomError) throw roomError;
-      if (room?.created_by === userId) {
-        setGameState((prev) => ({
-          ...prev,
-          isHost: true,
-        }));
-      }
-    } catch (error) {
-      console.error("Error checking room host:", error);
-    }
-  };
-
-  useEffect(() => {
-    if (!roomId) return;
-    checkRoomHost();
-  }, [roomId, supabase]);
-
   useEffect(() => {
     if (gameState.participants.length > 0) {
       // check if everyone has answered correct current word -> call next question
@@ -158,64 +149,6 @@ export const useGameState = (
       }
     }
   }, [gameState.participants, gameState.answers, gameState.wordData]);
-
-  // Setup all realtime channel subscriptions
-  useEffect(() => {
-    if (!roomId) return;
-    // Channel for participants (joins/leaves)
-    const participantsChannel = supabase
-      .channel(`room:${roomId}:participants`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "quiz_participants",
-          filter: `room_id=eq.${roomId}`,
-        },
-        (payload) => {
-          console.log("payload on participants channel", payload);
-          if (payload.eventType === "INSERT") {
-            // A new player joined
-            setGameState((prev) => ({
-              ...prev,
-              participants: [
-                ...prev.participants,
-                payload.new as Database["public"]["Tables"]["quiz_participants"]["Row"],
-              ],
-              events: [
-                ...prev.events,
-                {
-                  type: "player-joined",
-                  data: payload.new as Record<string, unknown>,
-                  timestamp: new Date().toISOString(),
-                },
-              ],
-            }));
-          } else if (payload.eventType === "DELETE") {
-            // A player left
-            setGameState((prev) => ({
-              ...prev,
-              participants: prev.participants.filter(
-                (p) => p.id !== payload.old.id
-              ),
-              events: [
-                ...prev.events,
-                {
-                  type: "player-left",
-                  data: payload.old as Record<string, unknown>,
-                  timestamp: new Date().toISOString(),
-                },
-              ],
-            }));
-          }
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(participantsChannel);
-    };
-  }, [roomId, supabase]);
 
   useEffect(() => {
     if (!roomId) return;
@@ -266,7 +199,7 @@ export const useGameState = (
       .on("broadcast", { event: "game_start" }, async (payload) => {
         console.log("payload on game start channel", payload);
         const nextWord = roomWords[0];
-        if (gameState.isHost) {
+        if (isHost) {
           const imagePublicUrl = await getImagePublicUrl(
             nextWord.word.image_storage_path
           );
@@ -344,19 +277,57 @@ export const useGameState = (
           ],
         }));
       })
+      .on("broadcast", { event: "player_left" }, (payload) => {
+        console.log("payload on player left channel", payload);
+        setGameState((prev) => ({
+          ...prev,
+          participants: prev.participants.filter(
+            (p) => p.user_id !== payload.payload.userId
+          ),
+          events: [
+            ...prev.events,
+            {
+              type: "player-left",
+              data: payload as Record<string, unknown>,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }));
+      })
+      .on("broadcast", { event: "player_joined" }, (payload) => {
+        console.log("payload on player joined channel", payload);
+        setGameState((prev) => ({
+          ...prev,
+          participants: [
+            ...prev.participants.filter(
+              (p) => p.user_id !== payload.payload.player.user_id
+            ),
+            payload.payload
+              .player as Database["public"]["Tables"]["quiz_participants"]["Row"],
+          ],
+          events: [
+            ...prev.events,
+            {
+              type: "player-joined",
+              data: payload as Record<string, unknown>,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }));
+      })
       .subscribe();
     // Clean up function for when component unmounts
     return () => {
       supabase.removeChannel(gameEventsChannel);
     };
-  }, [roomId, supabase, gameState.isHost, roomWords]);
+  }, [roomId, supabase, isHost, roomWords]);
 
   // Helper function to start the game
   const startGame = async () => {
     try {
-      if (!gameState.isHost) return;
+      if (!isHost) return;
       // Broadcast game start event to all participants
-      await supabase.channel(`game:${roomId}`).send({
+      const data = await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "game_start",
         payload: {
@@ -364,25 +335,45 @@ export const useGameState = (
           started_at: new Date().toISOString(),
         },
       });
+      if (data === "ok") {
+        return true;
+      }
+      throw new Error(`Error starting game: ${data}`);
     } catch (error) {
       console.error("Error starting game:", error);
+      toast.error(
+        `Error starting game: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
     }
   };
 
   // Helper function to end the game
   const endGame = async () => {
     try {
-      if (!gameState.isHost) return;
+      if (!isHost) return;
       // Broadcast game end event to all participants
-      await supabase.channel(`game:${roomId}`).send({
+      const data = await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "game_end",
         payload: {
           ended_at: new Date().toISOString(),
         },
       });
+      if (data === "ok") {
+        return true;
+      }
+      throw new Error(`Error ending game: ${data}`);
     } catch (error) {
       console.error("Error ending game:", error);
+      toast.error(
+        `Error ending game: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
     }
   };
 
@@ -414,22 +405,73 @@ export const useGameState = (
       });
 
       if (error) throw error;
+      return true;
     } catch (error) {
       console.error("Error submitting answer:", error);
+      toast.error(
+        `Error submitting answer: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
     }
   };
 
   const joinRoom = async (displayName: string) => {
     try {
-      const { error } = await supabase.from("quiz_participants").insert({
-        display_name: displayName,
-        room_id: roomId,
-        user_id: userId,
-      });
+      // check if user is already in the room, if exists, update the display name
+      const { data: existingParticipant, error: existingParticipantError } =
+        await supabase
+          .from("quiz_participants")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("room_id", roomId);
+      if (existingParticipantError) throw existingParticipantError;
 
-      if (error) throw error;
+      if (existingParticipant.length > 0) {
+        const { error: updateError } = await supabase
+          .from("quiz_participants")
+          .update({ display_name: displayName })
+          .eq("id", existingParticipant[0].id);
+        if (updateError) throw updateError;
+        await supabase.channel(`game:${roomId}`).send({
+          type: "broadcast",
+          event: "player_joined",
+          payload: {
+            player: {
+              ...existingParticipant[0],
+              display_name: displayName,
+            },
+          },
+        });
+      } else {
+        const { error, data } = await supabase
+          .from("quiz_participants")
+          .insert({
+            display_name: displayName,
+            room_id: roomId,
+            user_id: userId,
+          })
+          .select();
+
+        if (error) throw error;
+        await supabase.channel(`game:${roomId}`).send({
+          type: "broadcast",
+          event: "player_joined",
+          payload: {
+            player: data[0],
+          },
+        });
+      }
+      return true;
     } catch (error) {
-      console.error("Error joining room:", error);
+      console.error("Error joining room:", error, roomId, userId, displayName);
+      toast.error(
+        `Error joining room: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
     }
   };
 
@@ -443,12 +485,17 @@ export const useGameState = (
       return publicUrlData.publicUrl;
     } catch (error) {
       console.error("Error getting image public url:", error);
+      toast.error(
+        `Error loading image: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   };
 
   const nextQuestion = async () => {
     try {
-      if (!gameState.isHost) return;
+      if (!isHost) return;
 
       const nextWordIndex = gameState.wordData.wordIndex + 1;
 
@@ -461,7 +508,7 @@ export const useGameState = (
       const imagePublicUrl = await getImagePublicUrl(
         nextWord.word.image_storage_path
       );
-      await supabase.channel(`game:${roomId}`).send({
+      const data = await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "next_question",
         payload: {
@@ -475,26 +522,46 @@ export const useGameState = (
           },
         },
       });
+      if (data === "ok") {
+        return true;
+      }
+      throw new Error(`Error next question: ${data}`);
     } catch (error) {
       console.error("Error next question:", error);
+      toast.error(
+        `Error loading next question: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
     }
   };
 
   const showLeaderboard = async () => {
     try {
-      if (!gameState.isHost) return;
-      await supabase.channel(`game:${roomId}`).send({
+      if (!isHost) return;
+      const data = await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "show_leaderboard",
         payload: {
           started_at: new Date().toISOString(),
         },
       });
-      setTimeout(() => {
-        nextQuestion();
-      }, 3000);
+      if (data === "ok") {
+        setTimeout(() => {
+          nextQuestion();
+        }, 3000);
+        return true;
+      }
+      throw new Error(`Error showing leaderboard: ${data}`);
     } catch (error) {
       console.error("Error showing leaderboard:", error);
+      toast.error(
+        `Error showing leaderboard: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
     }
   };
 
@@ -502,6 +569,7 @@ export const useGameState = (
     gameState,
     canAnswer,
     leaderboard,
+    isHost,
     startGame,
     endGame,
     submitAnswer,
