@@ -1,11 +1,12 @@
 import { ArrowRight, PauseCircle, Share2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { GameEvent } from "~/services/game-state";
 import type { Database } from "../../types/supabase";
 import { TIME_PER_QUESTION } from "../constants/game";
+import { Leaderboard, LeaderboardPlayer } from "./Leaderboard";
 
 interface QuizPlayerProps {
   pin: string;
-  roomId: string;
   wordData: {
     answer: string;
     scrambleWord: string;
@@ -22,7 +23,11 @@ interface QuizPlayerProps {
   ) => void;
   onEndGame?: () => void;
   onNextQuestion?: () => void;
+  onShowLeaderboard?: () => void;
   isHost: boolean;
+  canAnswer: boolean;
+  gameEvents: GameEvent[];
+  leaderboard: LeaderboardPlayer[];
 }
 
 export default function QuizPlayer({
@@ -33,9 +38,25 @@ export default function QuizPlayer({
   onSubmitAnswer = () => {},
   onEndGame = () => {},
   onNextQuestion = () => {},
+  onShowLeaderboard = () => {},
+  canAnswer,
+  gameEvents,
+  leaderboard,
 }: QuizPlayerProps) {
   const [timeRemaining, setTimeRemaining] = useState(TIME_PER_QUESTION);
   const [userAnswer, setUserAnswer] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isShowLeaderboard = useMemo(() => {
+    // if the last event is a show leaderboard event, return true
+    return gameEvents[gameEvents.length - 1].type === "show-leaderboard";
+  }, [gameEvents]);
+
+  const currentScore = useMemo(() => {
+    const scoreMultiplier = Math.max(1, timeRemaining / 10);
+    const baseScore = 100;
+    const score = Math.round(baseScore * scoreMultiplier);
+    return score;
+  }, [timeRemaining]);
 
   useEffect(() => {
     if (timeRemaining > 0) {
@@ -43,13 +64,15 @@ export default function QuizPlayer({
       return () => clearTimeout(timer);
     } else if (timeRemaining === 0) {
       // Move to next question when time runs out
-      onNextQuestion();
+      onShowLeaderboard();
     }
   }, [timeRemaining]);
 
   useEffect(() => {
     if (wordData.wordIndex > -1) {
       setTimeRemaining(TIME_PER_QUESTION);
+      setUserAnswer("");
+      inputRef.current?.focus();
     }
   }, [wordData]);
 
@@ -70,8 +93,10 @@ export default function QuizPlayer({
 
       onSubmitAnswer(userAnswer, isCorrect, score, timeTaken);
 
-      // Clear answer and move to next question
-      setUserAnswer("");
+      if (!isCorrect) {
+        // Clear answer and move to next question
+        setUserAnswer("");
+      }
     } catch (error) {
       console.error("Error submitting answer:", error);
     }
@@ -114,84 +139,74 @@ export default function QuizPlayer({
         </div>
       </header>
 
-      <div className="grid flex-1 grid-cols-1 gap-6 p-6 md:grid-cols-2">
-        <div className="flex flex-col items-center justify-center">
-          <div className="mb-4 text-center">
-            <p className="text-lg text-white/80">Unscramble this word:</p>
-            <h2 className="mb-4 text-4xl font-bold text-white">
-              {wordData.scrambleWord}
-            </h2>
-            {wordData.definition && (
-              <p className="mb-4 italic text-white/80">
-                <span className="font-semibold">Hint:</span>{" "}
-                {wordData.definition}
-              </p>
-            )}
-          </div>
-
-          <input
-            type="text"
-            value={userAnswer}
-            onChange={(e) => setUserAnswer(e.target.value)}
-            className="mb-4 w-full max-w-xs rounded-lg border-0 px-4 py-2 text-center"
-            placeholder="Enter your answer"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSubmitAnswer();
-              }
-            }}
-          />
-          <button
-            onClick={handleSubmitAnswer}
-            className="w-full max-w-xs rounded-lg bg-emerald-500 py-2 font-semibold text-white hover:bg-emerald-600"
-          >
-            Submit
-          </button>
-
-          <div className="mt-8 h-2 w-full max-w-xs rounded-full bg-black/20">
-            <div
-              className="h-2 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-300"
-              style={{ width: `${(timeRemaining / TIME_PER_QUESTION) * 100}%` }}
-            ></div>
-          </div>
-          <div className="mt-1 text-sm text-white/80">
-            {timeRemaining} seconds
+      {isShowLeaderboard ? (
+        <div className="flex flex-1 items-center justify-center">
+          <div className="mx-auto max-w-lg p-6 w-full">
+            <Leaderboard players={leaderboard} />
           </div>
         </div>
+      ) : (
+        <div className="grid flex-1 grid-cols-1 gap-6 p-6 md:grid-cols-2">
+          <div className="flex flex-col items-center justify-center">
+            <div className="mb-4 text-center">
+              <p className="text-lg text-white/80">Unscramble this word:</p>
+              <h2 className="mb-4 text-4xl font-bold text-white">
+                {wordData.scrambleWord}
+              </h2>
+              {wordData.definition && (
+                <p className="mb-4 italic text-white/80">
+                  <span className="font-semibold">Hint:</span>{" "}
+                  {wordData.definition}
+                </p>
+              )}
+            </div>
 
-        <div className="flex flex-col rounded-lg bg-emerald-950 p-4">
-          <h3 className="mb-4 text-center text-lg font-semibold text-white">
-            Live Answers
-          </h3>
-          <div className="flex-1 overflow-y-auto">
-            {playerAnswers.length > 0 ? (
-              <div className="space-y-2">
-                {playerAnswers.map((answer) => (
-                  <div
-                    key={answer.id}
-                    className={`rounded-lg p-3 ${
-                      answer.is_correct ? "bg-green-800/30" : "bg-red-800/30"
-                    }`}
-                  >
-                    <div className="flex justify-between">
-                      <span className="text-sm text-white/90">
-                        {answer.answer_text}
-                      </span>
-                      <span className="font-bold text-white">
-                        {answer.score} pts
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-white/50">
-                <p>No answers yet</p>
-              </div>
+            <input
+              ref={inputRef}
+              type="text"
+              value={userAnswer}
+              onChange={(e) => setUserAnswer(e.target.value)}
+              className="mb-4 w-full max-w-xs rounded-lg border-0 px-4 py-2 text-center"
+              placeholder="Enter your answer"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleSubmitAnswer();
+                }
+              }}
+              disabled={!canAnswer}
+              autoFocus
+            />
+            {canAnswer && (
+              <button
+                onClick={handleSubmitAnswer}
+                className="w-full max-w-xs rounded-lg bg-emerald-500 py-2 font-semibold text-white hover:bg-emerald-600"
+              >
+                Submit
+              </button>
             )}
+
+            <div className="mt-8 h-2 w-full max-w-xs rounded-full bg-black/20">
+              <div
+                className="h-2 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-300"
+                style={{
+                  width: `${(timeRemaining / TIME_PER_QUESTION) * 100}%`,
+                }}
+              />
+            </div>
+            <div className="mt-1 text-sm text-white/80">{currentScore}</div>
+          </div>
+
+          <div className="flex flex-col rounded-lg bg-emerald-950 p-4">
+            <div className="flex-1 overflow-y-auto items-center flex justify-center">
+              <img
+                src={wordData.image}
+                alt="Guess this word"
+                className="w-full h-72 object-contain rounded-lg shadow-md mb-4"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

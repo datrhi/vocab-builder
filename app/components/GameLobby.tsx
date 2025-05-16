@@ -83,6 +83,11 @@ export default function GameLobby({
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  handleJoinRoom();
+                }
+              }}
               placeholder="Enter your display name"
               className="mb-3 w-full rounded-lg border-0 px-4 py-2 text-center"
             />

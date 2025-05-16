@@ -1,6 +1,6 @@
 import { useOutletContext } from "@remix-run/react";
 import { SupabaseClient } from "@supabase/supabase-js";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Database } from "../../types/supabase";
 
 export type GameStatus = "waiting" | "in-progress" | "completed";
@@ -12,7 +12,8 @@ export type GameEvent = {
     | "game-start"
     | "game-end"
     | "new-answer"
-    | "next-question";
+    | "next-question"
+    | "show-leaderboard";
   data: Record<string, unknown>;
   timestamp: string;
 };
@@ -33,6 +34,7 @@ export type GameState = {
     wordIndex: number;
     id: string;
   };
+  isShowLeaderboard: boolean;
 };
 
 export const useGameState = (
@@ -59,18 +61,63 @@ export const useGameState = (
       wordIndex: 0,
       id: "",
     },
+    isShowLeaderboard: false,
   });
-  console.log("🚀 hieudang log ~ gameState:", gameState);
 
   const { supabase } = useOutletContext<{
     supabase: SupabaseClient<Database>;
   }>();
+  console.log("gameState", gameState);
+
+  const leaderboard = useMemo(() => {
+    return gameState.participants.map((participant) => {
+      const score = gameState.answers.reduce((acc, answer) => {
+        if (answer.participant_id === participant.id) {
+          return acc + (answer.score || 0);
+        }
+        return acc;
+      }, 0);
+      return {
+        id: participant.id,
+        username: participant.display_name,
+        score: score,
+        avatar: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`,
+        isHost: gameState.isHost,
+      };
+    });
+  }, [gameState.participants, gameState.answers, gameState.isHost]);
+
+  const canAnswer = useMemo(() => {
+    const participantId = gameState.participants.find(
+      (p) => p.user_id === userId
+    )?.id;
+    const isAnswerCorrect = gameState.answers.find(
+      (answer) =>
+        answer.participant_id === participantId &&
+        answer.is_correct &&
+        answer.room_word_id == gameState.wordData.id
+    );
+
+    return isAnswerCorrect === undefined;
+  }, [
+    gameState.answers,
+    userId,
+    gameState.participants,
+    gameState.wordData.id,
+  ]);
 
   const scrambleWord = (word: string) => {
-    return word
+    let scrambledWord = word
       .split("")
       .sort(() => Math.random() - 0.5)
-      .join("");
+      .join("/");
+    while (scrambledWord === word) {
+      scrambledWord = word
+        .split("")
+        .sort(() => Math.random() - 0.5)
+        .join("/");
+    }
+    return scrambledWord;
   };
 
   const checkRoomHost = async () => {
@@ -97,6 +144,21 @@ export const useGameState = (
     checkRoomHost();
   }, [roomId, supabase]);
 
+  useEffect(() => {
+    if (gameState.participants.length > 0) {
+      // check if everyone has answered correct current word -> call next question
+      const isEveryoneAnsweredCorrectly =
+        gameState.answers.filter(
+          (answer) =>
+            answer.is_correct && answer.room_word_id === gameState.wordData.id
+        ).length === gameState.participants.length;
+
+      if (isEveryoneAnsweredCorrectly) {
+        showLeaderboard();
+      }
+    }
+  }, [gameState.participants, gameState.answers, gameState.wordData]);
+
   // Setup all realtime channel subscriptions
   useEffect(() => {
     if (!roomId) return;
@@ -112,6 +174,7 @@ export const useGameState = (
           filter: `room_id=eq.${roomId}`,
         },
         (payload) => {
+          console.log("payload on participants channel", payload);
           if (payload.eventType === "INSERT") {
             // A new player joined
             setGameState((prev) => ({
@@ -171,10 +234,7 @@ export const useGameState = (
             .join(",")})`,
         },
         (payload) => {
-          console.log(
-            "🚀 hieudang log ~ .on answers channel~ payload:",
-            payload
-          );
+          console.log("payload on answers channel", payload);
           setGameState((prev) => ({
             ...prev,
             answers: [
@@ -203,10 +263,13 @@ export const useGameState = (
     // Custom channel for game events
     const gameEventsChannel = supabase
       .channel(`game:${roomId}`)
-      .on("broadcast", { event: "game_start" }, (payload) => {
-        console.log("🚀 hieudang log ~ .on game start~ payload:", payload);
+      .on("broadcast", { event: "game_start" }, async (payload) => {
+        console.log("payload on game start channel", payload);
         const nextWord = roomWords[0];
-        gameState.isHost &&
+        if (gameState.isHost) {
+          const imagePublicUrl = await getImagePublicUrl(
+            nextWord.word.image_storage_path
+          );
           supabase.channel(`game:${roomId}`).send({
             type: "broadcast",
             event: "next_question",
@@ -215,12 +278,13 @@ export const useGameState = (
                 scrambleWord: scrambleWord(nextWord.word.word),
                 answer: nextWord.word.word,
                 definition: nextWord.word.definition,
-                image: nextWord.word.image_storage_path,
+                image: imagePublicUrl,
                 wordIndex: 0,
                 id: nextWord.id,
               },
             },
           });
+        }
         setGameState((prev) => ({
           ...prev,
           status: "in-progress",
@@ -235,7 +299,7 @@ export const useGameState = (
         }));
       })
       .on("broadcast", { event: "game_end" }, (payload) => {
-        console.log("🚀 hieudang log ~ .on game end~ payload:", payload);
+        console.log("payload on game end channel", payload);
         setGameState((prev) => ({
           ...prev,
           status: "completed",
@@ -250,10 +314,11 @@ export const useGameState = (
         }));
       })
       .on("broadcast", { event: "next_question" }, (payload) => {
-        console.log("🚀 hieudang log ~ .on next question~ payload:", payload);
+        console.log("payload on next question channel", payload);
         setGameState((prev) => ({
           ...prev,
           wordData: payload.payload.wordData as GameState["wordData"],
+          isShowLeaderboard: false,
           events: [
             ...prev.events,
             {
@@ -264,8 +329,22 @@ export const useGameState = (
           ],
         }));
       })
+      .on("broadcast", { event: "show_leaderboard" }, (payload) => {
+        console.log("payload on show leaderboard channel", payload);
+        setGameState((prev) => ({
+          ...prev,
+          isShowLeaderboard: true,
+          events: [
+            ...prev.events,
+            {
+              type: "show-leaderboard",
+              data: payload as Record<string, unknown>,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }));
+      })
       .subscribe();
-
     // Clean up function for when component unmounts
     return () => {
       supabase.removeChannel(gameEventsChannel);
@@ -285,12 +364,6 @@ export const useGameState = (
           started_at: new Date().toISOString(),
         },
       });
-
-      // // Update local state
-      // setGameState((prev) => ({
-      //   ...prev,
-      //   status: "in-progress",
-      // }));
     } catch (error) {
       console.error("Error starting game:", error);
     }
@@ -308,12 +381,6 @@ export const useGameState = (
           ended_at: new Date().toISOString(),
         },
       });
-
-      // // Update local state
-      // setGameState((prev) => ({
-      //   ...prev,
-      //   status: "completed",
-      // }));
     } catch (error) {
       console.error("Error ending game:", error);
     }
@@ -366,6 +433,19 @@ export const useGameState = (
     }
   };
 
+  const getImagePublicUrl = async (imagePath: string) => {
+    try {
+      const { data: publicUrlData } = await supabase.storage
+        .from("word-images")
+        .getPublicUrl(imagePath);
+      if (!publicUrlData) throw new Error("Can't get image");
+
+      return publicUrlData.publicUrl;
+    } catch (error) {
+      console.error("Error getting image public url:", error);
+    }
+  };
+
   const nextQuestion = async () => {
     try {
       if (!gameState.isHost) return;
@@ -378,6 +458,9 @@ export const useGameState = (
       }
 
       const nextWord = roomWords[nextWordIndex];
+      const imagePublicUrl = await getImagePublicUrl(
+        nextWord.word.image_storage_path
+      );
       await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "next_question",
@@ -386,7 +469,7 @@ export const useGameState = (
             scrambleWord: scrambleWord(nextWord.word.word),
             answer: nextWord.word.word,
             definition: nextWord.word.definition,
-            image: nextWord.word.image_storage_path,
+            image: imagePublicUrl,
             wordIndex: nextWordIndex,
             id: nextWord.id,
           },
@@ -397,12 +480,33 @@ export const useGameState = (
     }
   };
 
+  const showLeaderboard = async () => {
+    try {
+      if (!gameState.isHost) return;
+      await supabase.channel(`game:${roomId}`).send({
+        type: "broadcast",
+        event: "show_leaderboard",
+        payload: {
+          started_at: new Date().toISOString(),
+        },
+      });
+      setTimeout(() => {
+        nextQuestion();
+      }, 3000);
+    } catch (error) {
+      console.error("Error showing leaderboard:", error);
+    }
+  };
+
   return {
     gameState,
+    canAnswer,
+    leaderboard,
     startGame,
     endGame,
     submitAnswer,
     joinRoom,
     nextQuestion,
+    showLeaderboard,
   };
 };

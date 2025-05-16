@@ -196,11 +196,14 @@ export default function Play() {
 
   const {
     gameState,
+    canAnswer,
+    leaderboard,
     submitAnswer,
     endGame,
     joinRoom,
     startGame,
     nextQuestion,
+    showLeaderboard,
   } = useGameState(roomId, userId, roomWords, participants);
 
   const renderGame = () => {
@@ -221,13 +224,16 @@ export default function Play() {
         return (
           <QuizPlayer
             pin={pin}
-            roomId={roomId}
             wordData={gameState.wordData}
             playerAnswers={gameState.answers}
             onEndGame={endGame}
             onSubmitAnswer={submitAnswer}
+            onShowLeaderboard={showLeaderboard}
             isHost={gameState.isHost}
             onNextQuestion={nextQuestion}
+            canAnswer={canAnswer}
+            gameEvents={gameState.events}
+            leaderboard={leaderboard}
           />
         );
       case "completed":
