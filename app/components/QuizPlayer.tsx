@@ -127,11 +127,12 @@ export default function QuizPlayer({
       const score = Math.round(baseScore * scoreMultiplier);
 
       onSubmitAnswer(userAnswer, isCorrect, score, timeTaken);
-      setShouldStartTimer(false);
 
       if (!isCorrect) {
         // Clear answer and move to next question
         setUserAnswer("");
+      } else {
+        setShouldStartTimer(false);
       }
     } catch (error) {
       console.error("Error submitting answer:", error);
