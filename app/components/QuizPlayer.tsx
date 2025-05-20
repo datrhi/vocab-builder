@@ -1,5 +1,6 @@
 import { ArrowRight, PauseCircle, Share2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTextToSpeech } from "~/hooks/use-text-to-speech";
 import { GameEvent } from "~/services/game-state";
 import type { Database } from "../../types/supabase";
 import { TIME_PER_QUESTION } from "../constants/game";
@@ -45,7 +46,9 @@ export default function QuizPlayer({
 }: QuizPlayerProps) {
   const [timeRemaining, setTimeRemaining] = useState(TIME_PER_QUESTION);
   const [userAnswer, setUserAnswer] = useState("");
+  const [shouldStartTimer, setShouldStartTimer] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { speak, isSpeaking, stop } = useTextToSpeech();
   const isShowLeaderboard = useMemo(() => {
     // if the last event is a show leaderboard event, return true
     return gameEvents[gameEvents.length - 1].type === "show-leaderboard";
@@ -59,25 +62,54 @@ export default function QuizPlayer({
   }, [timeRemaining]);
 
   useEffect(() => {
-    if (timeRemaining > 0) {
-      const timer = setTimeout(() => setTimeRemaining(timeRemaining - 1), 1000);
+    if (shouldStartTimer && timeRemaining > 0) {
+      inputRef.current?.focus();
+      const timer = setTimeout(
+        () => setTimeRemaining((prev) => prev - 1),
+        1000
+      );
       if (!canAnswer) {
         clearTimeout(timer);
       }
-      return () => clearTimeout(timer);
     } else if (timeRemaining === 0) {
-      // Move to next question when time runs out
       onShowLeaderboard();
+      setShouldStartTimer(false);
     }
-  }, [timeRemaining, canAnswer]);
+  }, [timeRemaining, canAnswer, shouldStartTimer]);
 
   useEffect(() => {
     if (wordData.wordIndex > -1) {
       setTimeRemaining(TIME_PER_QUESTION);
       setUserAnswer("");
-      inputRef.current?.focus();
+
+      // Read the definition when a new word is displayed
+      if (wordData.definition) {
+        speak(wordData.definition, {
+          onEnd: () => {
+            // Start the timer after speaking is complete
+            setShouldStartTimer(true);
+          },
+        });
+      } else {
+        // If there's no definition to speak, start the timer immediately
+        setShouldStartTimer(true);
+      }
     }
   }, [wordData]);
+
+  useEffect(() => {
+    return () => {
+      stop();
+    };
+  }, []);
+
+  // Show a visual indicator that we're waiting for the definition to be spoken
+  const getTimerStatusText = () => {
+    if (!shouldStartTimer && isSpeaking) {
+      return "Listening to hint...";
+    }
+    return "";
+  };
 
   const handleSubmitAnswer = async () => {
     if (!userAnswer.trim()) return;
@@ -95,6 +127,7 @@ export default function QuizPlayer({
       const score = Math.round(baseScore * scoreMultiplier);
 
       onSubmitAnswer(userAnswer, isCorrect, score, timeTaken);
+      setShouldStartTimer(false);
 
       if (!isCorrect) {
         // Clear answer and move to next question
@@ -109,7 +142,7 @@ export default function QuizPlayer({
     <div className="flex min-h-screen flex-col bg-emerald-900">
       <header className="flex items-center justify-between bg-emerald-950 px-4 py-3 text-white">
         <div className="flex items-center gap-2">
-          <span className="text-sm ft-bold">Quiz.com</span>
+          <span className="text-sm ft-bold">VocabBuilder</span>
           <span className="text-sm text-white/75">PIN {pin}</span>
         </div>
         <div className="flex items-center gap-2 text-sm">
@@ -176,12 +209,13 @@ export default function QuizPlayer({
                   handleSubmitAnswer();
                 }
               }}
-              disabled={!canAnswer}
+              disabled={!canAnswer || !shouldStartTimer}
             />
             {canAnswer && (
               <button
                 onClick={handleSubmitAnswer}
-                className="w-full max-w-xs rounded-lg bg-emerald-500 py-2 font-semibold text-white hover:bg-emerald-600"
+                className="w-full max-w-xs rounded-lg bg-emerald-500 py-2 font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                disabled={!shouldStartTimer}
               >
                 Submit
               </button>
@@ -191,11 +225,18 @@ export default function QuizPlayer({
               <div
                 className="h-2 rounded-full bg-gradient-to-r from-yellow-500 to-yellow-300"
                 style={{
-                  width: `${(timeRemaining / TIME_PER_QUESTION) * 100}%`,
+                  width: `${
+                    shouldStartTimer
+                      ? (timeRemaining / TIME_PER_QUESTION) * 100
+                      : 0
+                  }%`,
                 }}
               />
             </div>
-            <div className="mt-1 text-sm text-white/80">{currentScore}</div>
+            <div className="mt-1 text-sm text-white/80 flex justify-between w-full max-w-xs">
+              <span>{getTimerStatusText()}</span>
+              <span>{currentScore}</span>
+            </div>
           </div>
 
           <div className="flex flex-col rounded-lg bg-emerald-950 p-4">

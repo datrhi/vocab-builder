@@ -58,7 +58,7 @@ export const useGameState = (
       answer: "",
       definition: "",
       image: "",
-      wordIndex: 0,
+      wordIndex: -1,
       id: "",
     },
     isShowLeaderboard: false,
