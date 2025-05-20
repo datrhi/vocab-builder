@@ -17,6 +17,7 @@ import { createBrowserClient } from "@supabase/ssr";
 import { User } from "@supabase/supabase-js";
 import { useState } from "react";
 import { Toaster } from "react-hot-toast";
+import { SoundEffectsProvider } from "./components/sound-effects";
 import { getCurrentUser } from "./services/auth.server";
 import tailwindStylesUrl from "./tailwind.css?url";
 
@@ -67,6 +68,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json({ env, user }, { headers: response.headers });
 }
 
+// Preload the audio assets
+const audioAssets = [{ rel: "preload", href: "/audio/sfx.mp3", as: "audio" }];
+
 // The `Layout` component is effectively merged into `App` now.
 // If you had specific logic in `Layout` beyond the HTML shell, it would be integrated here.
 
@@ -83,20 +87,32 @@ export default function App() {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+
+        {/* Preload audio assets */}
+        {audioAssets.map((asset) => (
+          <link
+            key={asset.href}
+            rel={asset.rel}
+            href={asset.href}
+            as={asset.as}
+          />
+        ))}
       </head>
       <body className="h-full bg-neutral-50 font-nunito">
-        <Outlet context={{ env, user, supabase }} />
-        <Toaster
-          position="bottom-center"
-          toastOptions={{
-            success: {
-              icon: "✅",
-            },
-            error: {
-              icon: "❌",
-            },
-          }}
-        />
+        <SoundEffectsProvider>
+          <Outlet context={{ env, user, supabase }} />
+          <Toaster
+            position="bottom-center"
+            toastOptions={{
+              success: {
+                icon: "✅",
+              },
+              error: {
+                icon: "❌",
+              },
+            }}
+          />
+        </SoundEffectsProvider>
         <ScrollRestoration />
         <Scripts />
         <script
