@@ -8,6 +8,7 @@ import {
   useSearchParams,
 } from "@remix-run/react";
 import { useCallback } from "react";
+import AudioPlayer from "~/components/AudioPlayer";
 import GameLobby from "~/components/GameLobby";
 import QuizPlayer from "~/components/QuizPlayer";
 import { getCurrentUser } from "~/services/auth.server";
@@ -302,5 +303,10 @@ export default function Play() {
     }
   };
 
-  return <div className="min-h-screen bg-emerald-50">{renderGame()}</div>;
+  return (
+    <div className="min-h-screen bg-emerald-50">
+      <AudioPlayer audioSrc="/audio/game3.mp3" autoPlay loop volume={0.3} />
+      {renderGame()}
+    </div>
+  );
 }
