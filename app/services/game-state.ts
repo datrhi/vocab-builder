@@ -2,6 +2,7 @@ import { useBeforeUnload, useOutletContext } from "@remix-run/react";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { useSoundEffects } from "~/components/sound-effects";
 import type { Database } from "../../types/supabase";
 
 export type GameStatus = "waiting" | "in-progress" | "completed";
@@ -62,6 +63,8 @@ export const useGameState = (
     },
     isShowLeaderboard: false,
   });
+
+  const { play } = useSoundEffects();
 
   const isHost = room.created_by === userId;
   // Handle when user leaves the page (before unload event)
@@ -296,6 +299,7 @@ export const useGameState = (
       })
       .on("broadcast", { event: "player_joined" }, (payload) => {
         console.log("payload on player joined channel", payload);
+        play("answerRecieved1");
         setGameState((prev) => ({
           ...prev,
           participants: [
@@ -385,12 +389,20 @@ export const useGameState = (
     timeTakenMs: number
   ) => {
     try {
+      console.log("submitAnswer", answerText, isCorrect, score, timeTakenMs);
       const participantId = gameState.participants.find(
         (p) => p.user_id === userId
       )?.id;
 
       if (!participantId) {
         throw new Error("Participant not found");
+      }
+      if (isCorrect) {
+        play("correctTypedAnswer");
+      } else {
+        // create a random number between 1 and 14
+        const randomNumber = Math.floor(Math.random() * 14) + 1;
+        play(`wrongAnswer${randomNumber}`);
       }
 
       const roomWordId = gameState.wordData.id;

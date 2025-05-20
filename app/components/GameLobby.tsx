@@ -23,6 +23,7 @@ export default function GameLobby({
   roomCreatedBy,
   onStartGame,
   onJoinRoom = () => Promise.resolve(true),
+  isHost,
 }: GameLobbyProps) {
   const [displayName, setDisplayName] = useState("");
   const [isJoined, setIsJoined] = useState(false);
