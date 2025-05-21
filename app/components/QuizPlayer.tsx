@@ -14,6 +14,7 @@ interface QuizPlayerProps {
     wordIndex: number;
     definition: string;
     image: string;
+    id: string;
   };
   playerAnswers: Database["public"]["Tables"]["player_answers"]["Row"][];
   onSubmitAnswer?: (
@@ -47,6 +48,7 @@ export default function QuizPlayer({
   const [timeRemaining, setTimeRemaining] = useState(TIME_PER_QUESTION);
   const [userAnswer, setUserAnswer] = useState("");
   const [shouldStartTimer, setShouldStartTimer] = useState(false);
+  const [showIncorrectAnswers, setShowIncorrectAnswers] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const { speak, isSpeaking, stop } = useTextToSpeech();
   const isShowLeaderboard = useMemo(() => {
@@ -61,16 +63,30 @@ export default function QuizPlayer({
     return score;
   }, [timeRemaining]);
 
+  const incorrectAnswers = useMemo(() => {
+    return playerAnswers
+      .filter(
+        (answer) =>
+          answer.is_correct === false && answer.room_word_id === wordData.id
+      )
+      .map((answer) => {
+        return {
+          answer: answer.answer_text || "",
+        };
+      });
+  }, [playerAnswers, wordData.wordIndex]);
+  console.log(incorrectAnswers, playerAnswers);
+
   useEffect(() => {
     if (shouldStartTimer && timeRemaining > 0) {
       inputRef.current?.focus();
-      const timer = setTimeout(
-        () => setTimeRemaining((prev) => prev - 1),
-        1000
-      );
-      if (!canAnswer) {
-        clearTimeout(timer);
-      }
+      // const timer = setTimeout(
+      //   () => setTimeRemaining((prev) => prev - 1),
+      //   1000
+      // );
+      // if (!canAnswer) {
+      //   clearTimeout(timer);
+      // }
     } else if (timeRemaining === 0) {
       onShowLeaderboard();
       setShouldStartTimer(false);
@@ -137,6 +153,10 @@ export default function QuizPlayer({
     } catch (error) {
       console.error("Error submitting answer:", error);
     }
+  };
+
+  const toggleIncorrectAnswers = () => {
+    setShowIncorrectAnswers((prev) => !prev);
   };
 
   return (
@@ -238,6 +258,28 @@ export default function QuizPlayer({
               <span>{getTimerStatusText()}</span>
               <span>{currentScore}</span>
             </div>
+
+            {incorrectAnswers.length > 0 && (
+              <div className="mt-4 w-full max-w-xs">
+                <button
+                  onClick={toggleIncorrectAnswers}
+                  className="text-white text-smp-2 w-full cursor-pointer underline opacity-80"
+                >
+                  {showIncorrectAnswers ? "Hide" : "Show"} incorrect answers
+                </button>
+                {showIncorrectAnswers && (
+                  <div className="rounded-b-lg overflow-hidden flex flex-wrap">
+                    {incorrectAnswers.map((answer, index) => (
+                      <div key={index} className="flex items-center py-1 px-2">
+                        <span className="ml-auto text-sm text-white line-through font-bold">
+                          {answer.answer}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col rounded-lg bg-emerald-950 p-4">
