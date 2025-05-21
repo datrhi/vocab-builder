@@ -147,18 +147,22 @@ async function createRoomWithPin(
 
   const roomId = newRoom.id;
 
-  // Fetch words with the same category
-  const { data: words, error: wordsError } = await supabase
-    .from("words")
-    .select("*")
-    .eq("category", quiz.category)
-    .order("created_at", { ascending: false })
-    .limit(WORDS_PER_GAME);
+  // Fetch random words with the same category
+  const { data: words, error: wordsError } = await supabase.rpc(
+    "get_random_words",
+    {
+      p_category: quiz.category,
+      p_limit: WORDS_PER_GAME,
+    }
+  );
 
-  if (wordsError) {
-    console.error("Error fetching words:", wordsError);
+  if (wordsError || !words || words.length === 0) {
+    console.error("Error fetching words:", wordsError || "No words found");
     throw json(
-      { message: "Failed to fetch words", details: wordsError.message },
+      {
+        message: "Failed to fetch words or no words available",
+        details: wordsError?.message || "No words found for this category",
+      },
       { status: 500 }
     );
   }

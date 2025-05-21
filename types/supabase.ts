@@ -288,6 +288,14 @@ export type Database = {
       }
     }
     Functions: {
+      add_quiz_room_words_insert_policy: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      add_sample_words_for_category: {
+        Args: { category_name: string }
+        Returns: undefined
+      }
       broadcast_game_event: {
         Args: { room_id: string; event_type: string; event_data: Json }
         Returns: undefined
@@ -295,6 +303,21 @@ export type Database = {
       generate_unique_pin: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_random_words: {
+        Args: { p_category: string; p_limit: number }
+        Returns: {
+          category: string | null
+          created_at: string
+          definition: string | null
+          example_sentence: string | null
+          id: string
+          image_alt_text: string | null
+          image_storage_path: string
+          part_of_speech_type: string | null
+          uploader_id: string | null
+          word: string
+        }[]
       }
       get_user_quiz_stats: {
         Args: { user_id: string }
