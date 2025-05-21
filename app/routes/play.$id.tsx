@@ -242,7 +242,6 @@ export default function Play() {
   const {
     gameState,
     canAnswer,
-    leaderboard,
     finalLeaderboard,
     isHost,
     submitAnswer,
@@ -294,7 +293,8 @@ export default function Play() {
             onNextQuestion={nextQuestion}
             canAnswer={canAnswer}
             gameEvents={gameState.events}
-            leaderboard={leaderboard}
+            leaderboard={gameState.leaderboard}
+            isShowCorrectAnswer={gameState.isShowCorrectAnswer}
           />
         );
       case "completed":

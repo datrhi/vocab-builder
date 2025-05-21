@@ -2,6 +2,7 @@ import { useBeforeUnload, useOutletContext } from "@remix-run/react";
 import { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
+import { LeaderboardPlayer } from "~/components/Leaderboard";
 import { useSoundEffects } from "~/components/sound-effects";
 import type { Database } from "../../types/supabase";
 
@@ -16,6 +17,7 @@ export type GameEvent = {
     | "new-answer"
     | "next-question"
     | "show-leaderboard"
+    | "show-correct-answer"
     | "show-final-leaderboard";
   data: Record<string, unknown>;
   timestamp: string;
@@ -37,7 +39,9 @@ export type GameState = {
     id: string;
   };
   isShowLeaderboard: boolean;
+  isShowCorrectAnswer: boolean;
   isFinalLeaderboard: boolean;
+  leaderboard: LeaderboardPlayer[];
 };
 
 export const useGameState = (
@@ -64,7 +68,9 @@ export const useGameState = (
       id: "",
     },
     isShowLeaderboard: false,
+    isShowCorrectAnswer: false,
     isFinalLeaderboard: false,
+    leaderboard: [],
   });
 
   const { play } = useSoundEffects();
@@ -90,26 +96,8 @@ export const useGameState = (
     }, [roomId, userId, supabase])
   );
 
-  const leaderboard = useMemo(() => {
-    return gameState.participants.map((participant) => {
-      const score = gameState.answers.reduce((acc, answer) => {
-        if (answer.participant_id === participant.id) {
-          return acc + (answer.score || 0);
-        }
-        return acc;
-      }, 0);
-      return {
-        id: participant.id,
-        username: participant.display_name,
-        score: score,
-        avatar: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`,
-        isHost: participant.user_id === room.created_by,
-      };
-    });
-  }, [gameState.participants, gameState.answers, room.created_by]);
-
   const finalLeaderboard = useMemo(() => {
-    return leaderboard.map((player) => {
+    return gameState.leaderboard.map((player) => {
       const playerAnswers = gameState.answers.filter(
         (answer) => answer.participant_id === player.id
       );
@@ -129,7 +117,7 @@ export const useGameState = (
         accuracy: `${accuracy}%`,
       };
     });
-  }, [gameState.answers, leaderboard]);
+  }, [gameState.answers, gameState.leaderboard]);
 
   const canAnswer = useMemo(() => {
     const participantId = gameState.participants.find(
@@ -174,7 +162,7 @@ export const useGameState = (
         ).length === gameState.participants.length;
 
       if (isEveryoneAnsweredCorrectly) {
-        showLeaderboard();
+        showCorrectAnswer();
       }
     }
   }, [gameState.participants, gameState.answers, gameState.wordData]);
@@ -291,11 +279,28 @@ export const useGameState = (
           ],
         }));
       })
+      .on("broadcast", { event: "show_correct_answer" }, (payload) => {
+        console.log("payload on show correct answer channel", payload);
+        setGameState((prev) => ({
+          ...prev,
+          isShowCorrectAnswer: true,
+          events: [
+            ...prev.events,
+            {
+              type: "show-correct-answer",
+              data: payload as Record<string, unknown>,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }));
+      })
       .on("broadcast", { event: "show_leaderboard" }, (payload) => {
         console.log("payload on show leaderboard channel", payload);
         setGameState((prev) => ({
           ...prev,
           isShowLeaderboard: true,
+          isShowCorrectAnswer: false,
+          leaderboard: payload.payload.leaderboard as LeaderboardPlayer[],
           events: [
             ...prev.events,
             {
@@ -591,20 +596,61 @@ export const useGameState = (
     }
   };
 
+  const showCorrectAnswer = async () => {
+    try {
+      if (!isHost) return;
+      await supabase.channel(`game:${roomId}`).send({
+        type: "broadcast",
+        event: "show_correct_answer",
+        payload: {
+          started_at: new Date().toISOString(),
+        },
+      });
+
+      setTimeout(() => {
+        showLeaderboard();
+      }, 5000);
+    } catch (error) {
+      console.error("Error showing correct answer:", error);
+      toast.error(
+        `Error showing correct answer: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
+    }
+  };
+
   const showLeaderboard = async () => {
     try {
       if (!isHost) return;
+      const leaderboard = gameState.participants.map((participant) => {
+        const score = gameState.answers.reduce((acc, answer) => {
+          if (answer.participant_id === participant.id) {
+            return acc + (answer.score || 0);
+          }
+          return acc;
+        }, 0);
+        return {
+          id: participant.id,
+          username: participant.display_name,
+          score: score,
+          avatar: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`,
+          isHost: participant.user_id === room.created_by,
+        };
+      });
       const data = await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "show_leaderboard",
         payload: {
           started_at: new Date().toISOString(),
+          leaderboard,
         },
       });
       if (data === "ok") {
-        setTimeout(() => {
-          nextQuestion();
-        }, 3000);
+        // setTimeout(() => {
+        //   nextQuestion();
+        // }, 5000);
         return true;
       }
       throw new Error(`Error showing leaderboard: ${data}`);
@@ -648,7 +694,6 @@ export const useGameState = (
   return {
     gameState,
     canAnswer,
-    leaderboard,
     finalLeaderboard,
     isHost,
     startGame,
@@ -657,6 +702,7 @@ export const useGameState = (
     joinRoom,
     nextQuestion,
     showLeaderboard,
+    showCorrectAnswer,
     showFinalLeaderboard,
   };
 };

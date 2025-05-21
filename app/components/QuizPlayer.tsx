@@ -4,6 +4,7 @@ import { useTextToSpeech } from "~/hooks/use-text-to-speech";
 import { GameEvent } from "~/services/game-state";
 import type { Database } from "../../types/supabase";
 import { TIME_PER_QUESTION } from "../constants/game";
+import { CorrectAnswer } from "./CorrectAnswer";
 import { Leaderboard, LeaderboardPlayer } from "./Leaderboard";
 
 interface QuizPlayerProps {
@@ -30,6 +31,7 @@ interface QuizPlayerProps {
   canAnswer: boolean;
   gameEvents: GameEvent[];
   leaderboard: LeaderboardPlayer[];
+  isShowCorrectAnswer?: boolean;
 }
 
 export default function QuizPlayer({
@@ -44,6 +46,7 @@ export default function QuizPlayer({
   canAnswer,
   gameEvents,
   leaderboard,
+  isShowCorrectAnswer = false,
 }: QuizPlayerProps) {
   const [timeRemaining, setTimeRemaining] = useState(TIME_PER_QUESTION);
   const [userAnswer, setUserAnswer] = useState("");
@@ -75,7 +78,31 @@ export default function QuizPlayer({
         };
       });
   }, [playerAnswers, wordData.wordIndex]);
-  console.log(incorrectAnswers, playerAnswers);
+
+  const leaderboardWithOldScore = useMemo(() => {
+    const leaderboardEvents = gameEvents.filter(
+      (event) => event.type === "show-leaderboard"
+    );
+    const lastShowLeaderboardEvent =
+      leaderboardEvents[leaderboardEvents.length - 2];
+    if (!lastShowLeaderboardEvent)
+      return leaderboard.map((player) => ({
+        ...player,
+        oldScore: 0,
+      }));
+    return leaderboard.map((player) => {
+      const leaderboardPayload = lastShowLeaderboardEvent?.data?.payload as {
+        leaderboard: LeaderboardPlayer[];
+      };
+      const oldScore = leaderboardPayload?.leaderboard?.find(
+        (p: LeaderboardPlayer) => p.id === player.id
+      )?.score;
+      return {
+        ...player,
+        oldScore,
+      };
+    });
+  }, [leaderboard, gameEvents]);
 
   useEffect(() => {
     if (shouldStartTimer && timeRemaining > 0) {
@@ -199,8 +226,12 @@ export default function QuizPlayer({
       {isShowLeaderboard ? (
         <div className="flex flex-1 items-center justify-center">
           <div className="mx-auto max-w-lg p-6 w-full">
-            <Leaderboard players={leaderboard} />
+            <Leaderboard players={leaderboardWithOldScore} />
           </div>
+        </div>
+      ) : isShowCorrectAnswer ? (
+        <div className="flex flex-1 items-center justify-center p-6">
+          <CorrectAnswer answer={wordData.answer} image={wordData.image} />
         </div>
       ) : (
         <div className="grid flex-1 grid-cols-1 gap-6 p-6 md:grid-cols-2">
