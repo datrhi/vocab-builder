@@ -9,13 +9,13 @@ import {
 } from "@remix-run/react";
 import { useCallback } from "react";
 import AudioPlayer from "~/components/AudioPlayer";
+import GameEnd from "~/components/GameEnd";
 import GameLobby from "~/components/GameLobby";
 import QuizPlayer from "~/components/QuizPlayer";
 import { getCurrentUser } from "~/services/auth.server";
+import { useGameState } from "~/services/game-state";
 import { createSupabaseServerClient } from "~/services/supabase.server";
 import type { Database } from "../../types/supabase";
-import GameEnd from "../components/GameEnd";
-import { useGameState } from "../services/game-state";
 
 type Quiz = Database["public"]["Tables"]["quizzes"]["Row"];
 type QuizRoom = Database["public"]["Tables"]["quiz_rooms"]["Row"];
@@ -243,6 +243,7 @@ export default function Play() {
     gameState,
     canAnswer,
     leaderboard,
+    finalLeaderboard,
     isHost,
     submitAnswer,
     endGame,
@@ -297,7 +298,7 @@ export default function Play() {
           />
         );
       case "completed":
-        return <GameEnd />;
+        return <GameEnd finalLeaderboardData={finalLeaderboard} />;
       default:
         return <div>Unknown game state</div>;
     }

@@ -80,13 +80,13 @@ export default function QuizPlayer({
   useEffect(() => {
     if (shouldStartTimer && timeRemaining > 0) {
       inputRef.current?.focus();
-      // const timer = setTimeout(
-      //   () => setTimeRemaining((prev) => prev - 1),
-      //   1000
-      // );
-      // if (!canAnswer) {
-      //   clearTimeout(timer);
-      // }
+      const timer = setTimeout(
+        () => setTimeRemaining((prev) => prev - 1),
+        1000
+      );
+      if (!canAnswer) {
+        clearTimeout(timer);
+      }
     } else if (timeRemaining === 0) {
       onShowLeaderboard();
       setShouldStartTimer(false);

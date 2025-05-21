@@ -15,7 +15,8 @@ export type GameEvent = {
     | "game-end"
     | "new-answer"
     | "next-question"
-    | "show-leaderboard";
+    | "show-leaderboard"
+    | "show-final-leaderboard";
   data: Record<string, unknown>;
   timestamp: string;
 };
@@ -36,6 +37,7 @@ export type GameState = {
     id: string;
   };
   isShowLeaderboard: boolean;
+  isFinalLeaderboard: boolean;
 };
 
 export const useGameState = (
@@ -62,6 +64,7 @@ export const useGameState = (
       id: "",
     },
     isShowLeaderboard: false,
+    isFinalLeaderboard: false,
   });
 
   const { play } = useSoundEffects();
@@ -104,6 +107,29 @@ export const useGameState = (
       };
     });
   }, [gameState.participants, gameState.answers, room.created_by]);
+
+  const finalLeaderboard = useMemo(() => {
+    return leaderboard.map((player) => {
+      const playerAnswers = gameState.answers.filter(
+        (answer) => answer.participant_id === player.id
+      );
+      const totalCorrect = playerAnswers.filter(
+        (answer) => answer.is_correct
+      ).length;
+      const totalIncorrect = playerAnswers.length - totalCorrect;
+      const accuracy =
+        playerAnswers.length > 0
+          ? Math.round((totalCorrect / playerAnswers.length) * 100)
+          : 0;
+
+      return {
+        ...player,
+        totalCorrect,
+        totalIncorrect,
+        accuracy: `${accuracy}%`,
+      };
+    });
+  }, [gameState.answers, leaderboard]);
 
   const canAnswer = useMemo(() => {
     const participantId = gameState.participants.find(
@@ -274,6 +300,21 @@ export const useGameState = (
             ...prev.events,
             {
               type: "show-leaderboard",
+              data: payload as Record<string, unknown>,
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        }));
+      })
+      .on("broadcast", { event: "show_final_leaderboard" }, (payload) => {
+        console.log("payload on show final leaderboard channel", payload);
+        setGameState((prev) => ({
+          ...prev,
+          isFinalLeaderboard: true,
+          events: [
+            ...prev.events,
+            {
+              type: "show-final-leaderboard",
               data: payload as Record<string, unknown>,
               timestamp: new Date().toISOString(),
             },
@@ -512,6 +553,7 @@ export const useGameState = (
       const nextWordIndex = gameState.wordData.wordIndex + 1;
 
       if (nextWordIndex >= roomWords.length) {
+        await showFinalLeaderboard();
         endGame();
         return;
       }
@@ -577,10 +619,37 @@ export const useGameState = (
     }
   };
 
+  const showFinalLeaderboard = async () => {
+    try {
+      if (!isHost) return;
+      const data = await supabase.channel(`game:${roomId}`).send({
+        type: "broadcast",
+        event: "show_final_leaderboard",
+        payload: {
+          ended_at: new Date().toISOString(),
+        },
+      });
+
+      if (data === "ok") {
+        return true;
+      }
+      throw new Error(`Error showing final leaderboard: ${data}`);
+    } catch (error) {
+      console.error("Error showing final leaderboard:", error);
+      toast.error(
+        `Error showing final leaderboard: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+      return false;
+    }
+  };
+
   return {
     gameState,
     canAnswer,
     leaderboard,
+    finalLeaderboard,
     isHost,
     startGame,
     endGame,
@@ -588,5 +657,6 @@ export const useGameState = (
     joinRoom,
     nextQuestion,
     showLeaderboard,
+    showFinalLeaderboard,
   };
 };
