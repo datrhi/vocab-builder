@@ -2,10 +2,13 @@ import { ArrowRight, PauseCircle, Share2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTextToSpeech } from "~/hooks/use-text-to-speech";
 import { GameEvent } from "~/services/game-state";
-import type { Database } from "../../types/supabase";
-import { TIME_PER_QUESTION } from "../constants/game";
+import {
+  TIME_PER_QUESTION,
+  TIME_TO_SHOW_CORRECT_ANSWER,
+} from "../constants/game";
 import { CorrectAnswer } from "./CorrectAnswer";
 import { Leaderboard, LeaderboardPlayer } from "./Leaderboard";
+import { UserList } from "./UserList";
 
 interface QuizPlayerProps {
   pin: string;
@@ -17,32 +20,38 @@ interface QuizPlayerProps {
     image: string;
     id: string;
   };
-  playerAnswers: Database["public"]["Tables"]["player_answers"]["Row"][];
   onSubmitAnswer?: (
     answerText: string,
     isCorrect: boolean,
     score: number,
     timeTakenMs: number
   ) => void;
-  onEndGame?: () => void;
   onNextQuestion?: () => void;
-  onShowLeaderboard?: () => void;
+  onShowCorrectedAnswer?: () => void;
   isHost: boolean;
   canAnswer: boolean;
   gameEvents: GameEvent[];
   leaderboard: LeaderboardPlayer[];
   isShowCorrectAnswer?: boolean;
+  incorrectAnswers: {
+    answer: string;
+  }[];
+  correctedUsers: {
+    id: string;
+    name: string;
+    avatarUrl: string;
+  }[];
 }
 
 export default function QuizPlayer({
   pin,
   wordData,
-  playerAnswers,
   isHost,
   onSubmitAnswer = () => {},
-  onEndGame = () => {},
+  correctedUsers,
+  incorrectAnswers,
   onNextQuestion = () => {},
-  onShowLeaderboard = () => {},
+  onShowCorrectedAnswer = () => {},
   canAnswer,
   gameEvents,
   leaderboard,
@@ -65,19 +74,6 @@ export default function QuizPlayer({
     const score = Math.round(baseScore * scoreMultiplier);
     return score;
   }, [timeRemaining]);
-
-  const incorrectAnswers = useMemo(() => {
-    return playerAnswers
-      .filter(
-        (answer) =>
-          answer.is_correct === false && answer.room_word_id === wordData.id
-      )
-      .map((answer) => {
-        return {
-          answer: answer.answer_text || "",
-        };
-      });
-  }, [playerAnswers, wordData.wordIndex]);
 
   const leaderboardWithOldScore = useMemo(() => {
     const leaderboardEvents = gameEvents.filter(
@@ -115,7 +111,9 @@ export default function QuizPlayer({
         clearTimeout(timer);
       }
     } else if (timeRemaining === 0) {
-      onShowLeaderboard();
+      setTimeout(() => {
+        onShowCorrectedAnswer();
+      }, TIME_TO_SHOW_CORRECT_ANSWER);
       setShouldStartTimer(false);
     }
   }, [timeRemaining, canAnswer, shouldStartTimer]);
@@ -291,7 +289,7 @@ export default function QuizPlayer({
             </div>
 
             {incorrectAnswers.length > 0 && (
-              <div className="mt-4 w-full max-w-xs">
+              <div className="mt-4 w-full max-w-xs max-h-40">
                 <button
                   onClick={toggleIncorrectAnswers}
                   className="text-white text-smp-2 w-full cursor-pointer underline opacity-80"
@@ -300,7 +298,7 @@ export default function QuizPlayer({
                 </button>
                 {showIncorrectAnswers && (
                   <div className="rounded-b-lg overflow-hidden flex flex-wrap">
-                    {incorrectAnswers.map((answer, index) => (
+                    {incorrectAnswers.slice(-20).map((answer, index) => (
                       <div key={index} className="flex items-center py-1 px-2">
                         <span className="ml-auto text-sm text-white line-through font-bold">
                           {answer.answer}
@@ -311,6 +309,7 @@ export default function QuizPlayer({
                 )}
               </div>
             )}
+            <UserList users={correctedUsers} />
           </div>
 
           <div className="flex flex-col rounded-lg bg-emerald-950 p-4">

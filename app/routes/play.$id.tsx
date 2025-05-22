@@ -244,12 +244,13 @@ export default function Play() {
     canAnswer,
     finalLeaderboard,
     isHost,
+    incorrectAnswers,
+    correctedUsers,
     submitAnswer,
-    endGame,
     joinRoom,
     startGame,
     nextQuestion,
-    showLeaderboard,
+    showCorrectAnswer,
   } = useGameState(room, userId, roomWords, participants);
 
   const leaveFetcher = useFetcher();
@@ -285,16 +286,16 @@ export default function Play() {
           <QuizPlayer
             pin={pin}
             wordData={gameState.wordData}
-            playerAnswers={gameState.answers}
-            onEndGame={endGame}
             onSubmitAnswer={submitAnswer}
-            onShowLeaderboard={showLeaderboard}
+            onShowCorrectedAnswer={showCorrectAnswer}
             isHost={isHost}
             onNextQuestion={nextQuestion}
             canAnswer={canAnswer}
             gameEvents={gameState.events}
             leaderboard={gameState.leaderboard}
             isShowCorrectAnswer={gameState.isShowCorrectAnswer}
+            correctedUsers={correctedUsers}
+            incorrectAnswers={incorrectAnswers}
           />
         );
       case "completed":

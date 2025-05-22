@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { LeaderboardPlayer } from "~/components/Leaderboard";
 import { useSoundEffects } from "~/components/sound-effects";
+import {
+  TIME_TO_SHOW_CORRECT_ANSWER,
+  TIME_TO_SHOW_LEADERBOARD,
+  TIME_TO_SHOW_NEXT_QUESTION,
+} from "~/constants/game";
 import type { Database } from "../../types/supabase";
 
 export type GameStatus = "waiting" | "in-progress" | "completed";
@@ -138,6 +143,41 @@ export const useGameState = (
     gameState.wordData.id,
   ]);
 
+  const incorrectAnswers = useMemo(() => {
+    return gameState.answers
+      .filter(
+        (answer) =>
+          answer.is_correct === false &&
+          answer.room_word_id === gameState.wordData.id
+      )
+      .map((answer) => {
+        return {
+          answer: answer.answer_text || "",
+        };
+      });
+  }, [gameState.answers, gameState.wordData.id]);
+
+  const correctedUsers = useMemo(() => {
+    return gameState.answers
+      .filter(
+        (answer) =>
+          answer.is_correct === true &&
+          answer.room_word_id === gameState.wordData.id
+      )
+      .map((answer) => {
+        const participant = gameState.participants.find(
+          (p) => p.id === answer.participant_id
+        );
+        if (!participant) return { id: "", name: "", avatarUrl: "" };
+        return {
+          id: participant.id,
+          name: participant.display_name,
+          avatarUrl: `https://api.dicebear.com/7.x/fun-emoji/svg?seed=${participant.display_name}`,
+        };
+      })
+      .filter((user) => user.id.length > 0);
+  }, [gameState.answers, gameState.participants, gameState.wordData.id]);
+
   const scrambleWord = (word: string) => {
     let scrambledWord = word
       .split("")
@@ -162,7 +202,9 @@ export const useGameState = (
         ).length === gameState.participants.length;
 
       if (isEveryoneAnsweredCorrectly) {
-        showCorrectAnswer();
+        setTimeout(() => {
+          showCorrectAnswer();
+        }, TIME_TO_SHOW_CORRECT_ANSWER);
       }
     }
   }, [gameState.participants, gameState.answers, gameState.wordData]);
@@ -599,17 +641,20 @@ export const useGameState = (
   const showCorrectAnswer = async () => {
     try {
       if (!isHost) return;
-      await supabase.channel(`game:${roomId}`).send({
+      const data = await supabase.channel(`game:${roomId}`).send({
         type: "broadcast",
         event: "show_correct_answer",
         payload: {
           started_at: new Date().toISOString(),
         },
       });
-
-      setTimeout(() => {
-        showLeaderboard();
-      }, 5000);
+      if (data === "ok") {
+        setTimeout(() => {
+          showLeaderboard();
+        }, TIME_TO_SHOW_LEADERBOARD);
+        return true;
+      }
+      throw new Error(`Error showing correct answer: ${data}`);
     } catch (error) {
       console.error("Error showing correct answer:", error);
       toast.error(
@@ -648,9 +693,9 @@ export const useGameState = (
         },
       });
       if (data === "ok") {
-        // setTimeout(() => {
-        //   nextQuestion();
-        // }, 5000);
+        setTimeout(() => {
+          nextQuestion();
+        }, TIME_TO_SHOW_NEXT_QUESTION);
         return true;
       }
       throw new Error(`Error showing leaderboard: ${data}`);
@@ -696,6 +741,8 @@ export const useGameState = (
     canAnswer,
     finalLeaderboard,
     isHost,
+    incorrectAnswers,
+    correctedUsers,
     startGame,
     endGame,
     submitAnswer,
