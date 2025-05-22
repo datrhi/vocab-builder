@@ -183,7 +183,7 @@ export const useGameState = (
       .split("")
       .sort(() => Math.random() - 0.5)
       .join("/");
-    while (scrambledWord === word) {
+    while (scrambledWord === word.split("").join("/")) {
       scrambledWord = word
         .split("")
         .sort(() => Math.random() - 0.5)
